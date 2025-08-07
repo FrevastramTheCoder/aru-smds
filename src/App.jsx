@@ -3,7 +3,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider } from './context/AuthContext';
-import Navbar from './components/NavBar';
+import Navbar from './components/Navbar.jsx';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import SystemDashboard from './pages/SystemDashboard';
