@@ -721,27 +721,27 @@ function DataManagement() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [dataType, setDataType] = useState('buildings');
-  const [attributes, setAttributes] = useState({});
   const [dataList, setDataList] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Pagination states
+  // Pagination
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(10);
 
+  // Filters
   const [filters, setFilters] = useState({});
 
-  // Upload state
+  // Upload
   const [file, setFile] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  // Update modal state
+  // Edit modal
   const [editRecord, setEditRecord] = useState(null);
   const [editFormData, setEditFormData] = useState({});
 
-  // Map preview state
+  // Map preview
   const [mapRecord, setMapRecord] = useState(null);
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
@@ -780,8 +780,7 @@ function DataManagement() {
   };
 
   // Use environment variable for API base URL (fallback to localhost)
-  const API_BASE =
-    import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
+  const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
 
   // Reset page and filters on dataType change
   useEffect(() => {
@@ -789,7 +788,7 @@ function DataManagement() {
     setFilters({});
   }, [dataType]);
 
-  // Fetch data
+  // Fetch data on dependencies change
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
@@ -839,12 +838,9 @@ function DataManagement() {
     }
   }, [dataType, page, debouncedFilters, limit, API_BASE]);
 
-  // Filter change
+  // Filter change handler
   const handleFilterChange = (e) => {
-    setFilters((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
     setPage(1);
   };
 
@@ -855,7 +851,7 @@ function DataManagement() {
     }
   };
 
-  // Upload handler
+  // Upload shapefile
   const handleFileUpload = async () => {
     if (!file) {
       setError('Please select a file to upload.');
@@ -895,7 +891,7 @@ function DataManagement() {
     }
   };
 
-  // Delete handler
+  // Delete record
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this record?')) return;
     setLoading(true);
@@ -908,7 +904,6 @@ function DataManagement() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Refresh list after delete
       fetchData();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to delete record.');
@@ -917,19 +912,15 @@ function DataManagement() {
     }
   };
 
-  // Open edit modal
+  // Open update modal
   const handleUpdate = (record) => {
     setEditRecord(record);
-    // Deep copy attributes for editing
     setEditFormData({ ...record.attributes });
   };
 
-  // Handle edit form changes
+  // Edit form change
   const handleEditChange = (e) => {
-    setEditFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setEditFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   // Submit update
@@ -944,9 +935,7 @@ function DataManagement() {
       await axios.put(
         `${API_BASE}/data/${dataType}/${editRecord.id || editRecord._id}`,
         { attributes: editFormData },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       setEditRecord(null);
@@ -958,18 +947,17 @@ function DataManagement() {
     }
   };
 
-  // Cancel edit
   const cancelEdit = () => {
     setEditRecord(null);
     setEditFormData({});
   };
 
-  // Show map preview for geometry
+  // Show map preview modal
   const handleShowMap = (record) => {
     setMapRecord(record);
   };
 
-  // Initialize / update Leaflet map when mapRecord changes
+  // Leaflet map setup and update
   useEffect(() => {
     if (!mapRecord) return;
 
@@ -985,7 +973,6 @@ function DataManagement() {
       });
     }
 
-    // Remove old layer if exists
     if (geoJsonLayer.current) {
       geoJsonLayer.current.remove();
     }
@@ -1000,7 +987,6 @@ function DataManagement() {
       setError('Invalid geometry data for map preview.');
     }
 
-    // Cleanup on unmount
     return () => {
       if (geoJsonLayer.current) {
         geoJsonLayer.current.remove();
@@ -1037,7 +1023,7 @@ function DataManagement() {
           </select>
         </div>
 
-        {/* Filtering inputs */}
+        {/* Filters */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-2">Filter Data</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -1057,7 +1043,7 @@ function DataManagement() {
           </div>
         </div>
 
-        {/* Shapefile Upload Section */}
+        {/* Upload */}
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-2">Upload Shapefile (.zip)</h2>
           <input
@@ -1167,7 +1153,7 @@ function DataManagement() {
         </div>
       </div>
 
-      {/* Update Modal */}
+      {/* Edit Modal */}
       {editRecord && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
