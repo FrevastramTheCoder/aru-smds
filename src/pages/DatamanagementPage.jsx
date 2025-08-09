@@ -986,7 +986,6 @@ function useDebounce(value, delay) {
 
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedValue(value), delay);
-
     return () => clearTimeout(handler);
   }, [value, delay]);
 
@@ -1010,6 +1009,10 @@ function DataManagement() {
 
   // Filtering state - object with keys matching attributeFields[dataType]
   const [filters, setFilters] = useState({});
+
+  // Shapefile upload file state
+  const [file, setFile] = useState(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   // Debounced filters to reduce API calls while typing
   const debouncedFilters = useDebounce(filters, 400);
@@ -1119,8 +1122,46 @@ function DataManagement() {
     }
   };
 
-  // Other handlers like handleAttributeChange, handleCreate, handleUpdate, handleDelete, handleShapefileUpload, MapPreview
-  // should be here exactly as in your original code.
+  // === Shapefile Upload Handler ===
+  const handleFileUpload = async () => {
+    if (!file) {
+      setError('Please select a file to upload.');
+      return;
+    }
+    setUploadLoading(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('shapefile', file);        // must match multer field name
+      formData.append('tableName', dataType);    // send current dataType as tableName
+
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('No authentication token found');
+
+      await axios.post(`${API_BASE}/upload`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setFile(null);
+      // Refresh data after successful upload
+      fetchData();
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setError('Upload endpoint not found. Please check server configuration.');
+      } else if (err.response?.status === 401) {
+        setError('Unauthorized: Please log in again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userId');
+      } else {
+        setError(err.response?.data?.error || 'Failed to upload shapefile. Please try again.');
+      }
+    } finally {
+      setUploadLoading(false);
+    }
+  };
 
   if (authLoading) return <div className="p-4">Loading authentication...</div>;
 
@@ -1132,7 +1173,7 @@ function DataManagement() {
       <div className="card">
         <h1 className="card-title">Data Management</h1>
         {error && <p className="error-message text-red-500">{error}</p>}
-        {loading && <div className="loading-spinner">Loading...</div>}
+        {(loading || uploadLoading) && <div className="loading-spinner">Loading...</div>}
 
         {/* Data Type Selection */}
         <div className="mb-4">
@@ -1168,6 +1209,24 @@ function DataManagement() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* === Shapefile Upload Section === */}
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-2">Upload Shapefile (.zip)</h2>
+          <input
+            type="file"
+            accept=".zip"
+            onChange={(e) => setFile(e.target.files[0])}
+            className="input-field border p-2 rounded"
+          />
+          <button
+            onClick={handleFileUpload}
+            disabled={uploadLoading || !file}
+            className="btn-primary bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600 disabled:bg-gray-400"
+          >
+            Upload
+          </button>
         </div>
 
         {/* Data List */}
@@ -1255,7 +1314,7 @@ function DataManagement() {
           )}
         </div>
 
-        {/* Add your Create, Upload Shapefile sections and other handlers here unchanged */}
+        {/* Your existing Create, Update, Delete handlers and MapPreview can be added here */}
       </div>
     </div>
   );
