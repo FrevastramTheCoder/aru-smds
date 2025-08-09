@@ -26,18 +26,24 @@
 //   const handleRegister = async (e) => {
 //     e.preventDefault();
 //     try {
+//       console.log('Registering with:', formData);
+//       console.log('Request URL:', `${import.meta.env.VITE_API_URL}/register`);
 //       await register(formData.username, formData.email, formData.password);
 //       setSuccess('Registration successful! Please check your email to verify your account.');
 //       setFormData({ username: '', email: '', password: '' });
-
 //       setTimeout(() => {
 //         navigate('/login');
 //       }, 3000);
 //     } catch (err) {
-//       if (err.errors) {
-//         setValidationErrors(err.errors);
+//       console.error('Registration error:', err);
+//       if (err.response?.errors) {
+//         setValidationErrors(err.response.errors);
 //       } else {
-//         setError(err.error || 'Registration failed');
+//         const errorMessage =
+//           err.response?.error === 'Email already registered'
+//             ? 'This email is already registered. Please use a different email or log in.'
+//             : err.response?.error || 'Registration failed';
+//         setError(errorMessage);
 //       }
 //     }
 //   };
@@ -118,51 +124,68 @@
 // }
 
 // export default Register;
+
+//security
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { User, Mail, Lock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 function Register() {
+  const { register, error: authError, setError } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
   });
-  const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState([]);
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
-  const { register } = useAuth();
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError('');
-    setSuccess('');
     setValidationErrors([]);
+    setSuccess('');
+    setError(null);
+  };
+
+  const validateInput = () => {
+    const errors = [];
+    if (formData.username.length < 3) errors.push({ msg: 'Username must be at least 3 characters' });
+    if (!/\S+@\S+\.\S+/.test(formData.email)) errors.push({ msg: 'Invalid email address' });
+    if (formData.password.length < 6) errors.push({ msg: 'Password must be at least 6 characters' });
+    return errors;
   };
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    setValidationErrors([]);
+    setSuccess('');
+    setError(null);
+
+    const inputErrors = validateInput();
+    if (inputErrors.length > 0) {
+      setValidationErrors(inputErrors);
+      return;
+    }
+
     try {
-      console.log('Registering with:', formData);
-      console.log('Request URL:', `${import.meta.env.VITE_API_URL}/register`);
       await register(formData.username, formData.email, formData.password);
       setSuccess('Registration successful! Please check your email to verify your account.');
       setFormData({ username: '', email: '', password: '' });
-      setTimeout(() => {
-        navigate('/login');
-      }, 3000);
+      setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       console.error('Registration error:', err);
-      if (err.response?.errors) {
-        setValidationErrors(err.response.errors);
+      if (err.validationErrors) {
+        setValidationErrors(err.validationErrors);
+      } else if (err.message) {
+        if (err.message.toLowerCase().includes('email already registered')) {
+          setError('This email is already registered. Please use a different email or log in.');
+        } else {
+          setError(err.message);
+        }
       } else {
-        const errorMessage =
-          err.response?.error === 'Email already registered'
-            ? 'This email is already registered. Please use a different email or log in.'
-            : err.response?.error || 'Registration failed';
-        setError(errorMessage);
+        setError('Registration failed due to an unknown error.');
       }
     }
   };
@@ -175,7 +198,7 @@ function Register() {
         </h1>
 
         {success && <p className="text-green-500 mb-4 text-center">{success}</p>}
-        {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+        {authError && <p className="text-red-500 mb-4 text-center">{authError}</p>}
 
         {validationErrors.length > 0 && (
           <ul className="text-red-500 mb-4 list-disc list-inside">
@@ -185,7 +208,7 @@ function Register() {
           </ul>
         )}
 
-        <form className="register-form" onSubmit={handleRegister}>
+        <form className="register-form" onSubmit={handleRegister} noValidate>
           <div className="input-wrapper mb-4 relative">
             <User className="input-icon w-5 h-5 text-gray-500 absolute left-3 top-3" />
             <input
@@ -196,6 +219,7 @@ function Register() {
               className="input-with-icon border p-2 rounded w-full pl-10 dark:bg-gray-700 dark:text-white"
               placeholder="Username"
               required
+              minLength={3}
             />
           </div>
           <div className="input-wrapper mb-4 relative">
@@ -220,6 +244,8 @@ function Register() {
               className="input-with-icon border p-2 rounded w-full pl-10 dark:bg-gray-700 dark:text-white"
               placeholder="Password"
               required
+              minLength={6}
+              autoComplete="new-password"
             />
           </div>
           <button

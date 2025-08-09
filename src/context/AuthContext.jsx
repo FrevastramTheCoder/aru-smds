@@ -116,13 +116,177 @@
 
 // export function useAuth() {
 //   return useContext(AuthContext);
+// // }
+// import React, { createContext, useContext, useState, useEffect } from 'react';
+
+// const AuthContext = createContext();
+
+// export function AuthProvider({ children }) {
+//   const baseApiUrl = import.meta.env.VITE_API_URL;
+//   const [isAuthenticated, setIsAuthenticated] = useState(false);
+//   const [user, setUser] = useState(null);
+//   const [isLoading, setIsLoading] = useState(true);
+//   const [error, setError] = useState(null);
+
+//   useEffect(() => {
+//     const token = localStorage.getItem('token');
+//     const userStr = localStorage.getItem('user');
+//     if (token && userStr) {
+//       setIsAuthenticated(true);
+//       setUser(JSON.parse(userStr));
+//     }
+//     setIsLoading(false);
+//   }, []);
+
+//   const register = async (username, email, password, retries = 3) => {
+//     let lastError;
+//     for (let attempt = 1; attempt <= retries; attempt++) {
+//       try {
+//         const response = await fetch(`${baseApiUrl}/register`, {
+//           method: 'POST',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify({ username, email, password }),
+//           credentials: 'include',
+//         });
+//         const data = await response.json();
+//         if (!response.ok) {
+//           const error = new Error(data.error || 'Registration failed');
+//           error.response = data;
+//           throw error;
+//         }
+//         if (data.token && data.user) {
+//           localStorage.setItem('token', data.token);
+//           localStorage.setItem('user', JSON.stringify(data.user));
+//           setIsAuthenticated(true);
+//           setUser(data.user);
+//         }
+//         setError(null);
+//         return data;
+//       } catch (error) {
+//         lastError = error;
+//         console.warn(`Register attempt ${attempt} failed: ${error.message}`);
+//         // Skip retries for 400 errors
+//         if (error.response?.status === 400) {
+//           console.log('Skipping retries for 400 Bad Request error');
+//           throw error;
+//         }
+//         if (attempt < retries) {
+//           await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+//         }
+//       }
+//     }
+//     console.error('Register fetch error:', lastError.message);
+//     setError(lastError.response?.error || lastError.message);
+//     throw lastError;
+//   };
+
+//   const login = async (formData, retries = 3) => {
+//     let lastError;
+//     for (let attempt = 1; attempt <= retries; attempt++) {
+//       try {
+//         const response = await fetch(`${baseApiUrl}/login`, {
+//           method: 'POST',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify(formData),
+//           credentials: 'include',
+//         });
+//         const data = await response.json();
+//         if (!response.ok) {
+//           const error = new Error(data.error || 'Login failed');
+//           error.response = data;
+//           throw error;
+//         }
+//         localStorage.setItem('token', data.token);
+//         localStorage.setItem('user', JSON.stringify(data.user));
+//         setIsAuthenticated(true);
+//         setUser(data.user);
+//         setError(null);
+//         return data;
+//       } catch (error) {
+//         lastError = error;
+//         console.warn(`Login attempt ${attempt} failed: ${error.message}`);
+//         if (attempt < retries) {
+//           await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+//         }
+//       }
+//     }
+//     console.error('Login fetch error:', lastError.message);
+//     setError(lastError.response?.details || lastError.message);
+//     throw lastError;
+//   };
+
+//   const googleLogin = async (token) => {
+//     if (!token) {
+//       throw new Error('No token provided');
+//     }
+//     localStorage.setItem('token', token);
+//     try {
+//       const base64Payload = token.split('.')[1];
+//       const payload = JSON.parse(atob(base64Payload));
+//       const userFromToken = {
+//         google_id: payload.id || payload.sub,
+//         email: payload.email,
+//         name: payload.name,
+//       };
+//       setUser(userFromToken);
+//       localStorage.setItem('user', JSON.stringify(userFromToken));
+//       setIsAuthenticated(true);
+//       setError(null);
+//       return { token, user: userFromToken };
+//     } catch (err) {
+//       setError('Invalid token format');
+//       setIsAuthenticated(false);
+//       localStorage.removeItem('token');
+//       localStorage.removeItem('user');
+//       throw err;
+//     }
+//   };
+
+//   const logout = () => {
+//     localStorage.removeItem('token');
+//     localStorage.removeItem('user');
+//     setIsAuthenticated(false);
+//     setUser(null);
+//     setError(null);
+//   };
+
+//   return (
+//     <AuthContext.Provider
+//       value={{
+//         register,
+//         login,
+//         googleLogin,
+//         logout,
+//         isAuthenticated,
+//         user,
+//         isLoading,
+//         error,
+//         setError,
+//         setIsAuthenticated,
+//         setUser,
+//       }}
+//     >
+//       {children}
+//     </AuthContext.Provider>
+//   );
 // }
+
+// export function useAuth() {
+//   const context = useContext(AuthContext);
+//   if (!context) {
+//     throw new Error('useAuth must be used within an AuthProvider');
+//   }
+//   return context;
+// }
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const baseApiUrl = import.meta.env.VITE_API_URL;
+  // Use fallback to relative path in dev environment
+ const baseApiUrl = import.meta.env.VITE_API_URL || '/api/v1/auth';
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -165,7 +329,6 @@ export function AuthProvider({ children }) {
       } catch (error) {
         lastError = error;
         console.warn(`Register attempt ${attempt} failed: ${error.message}`);
-        // Skip retries for 400 errors
         if (error.response?.status === 400) {
           console.log('Skipping retries for 400 Bad Request error');
           throw error;
