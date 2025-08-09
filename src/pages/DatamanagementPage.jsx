@@ -779,7 +779,9 @@ function DataManagement() {
     recreational_areas: ['size', 'condition'],
   };
 
-  const API_BASE = '/api';
+  // Use environment variable for API base URL (fallback to localhost)
+  const API_BASE =
+    import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
 
   // Reset page and filters on dataType change
   useEffect(() => {
@@ -808,7 +810,7 @@ function DataManagement() {
         ),
       };
 
-      const response = await axios.get(`${API_BASE}/spatial/data/${dataType}`, {
+      const response = await axios.get(`${API_BASE}/data/${dataType}`, {
         headers: { Authorization: `Bearer ${token}` },
         params,
       });
@@ -835,7 +837,7 @@ function DataManagement() {
     } finally {
       setLoading(false);
     }
-  }, [dataType, page, debouncedFilters, limit]);
+  }, [dataType, page, debouncedFilters, limit, API_BASE]);
 
   // Filter change
   const handleFilterChange = (e) => {
@@ -869,7 +871,7 @@ function DataManagement() {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
-      await axios.post(`${API_BASE}/spatial/upload`, formData, {
+      await axios.post(`${API_BASE}/upload`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
@@ -902,7 +904,7 @@ function DataManagement() {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
-      await axios.delete(`${API_BASE}/spatial/data/${dataType}/${id}`, {
+      await axios.delete(`${API_BASE}/data/${dataType}/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -940,7 +942,7 @@ function DataManagement() {
       if (!token) throw new Error('No authentication token found');
 
       await axios.put(
-        `${API_BASE}/spatial/data/${dataType}/${editRecord.id || editRecord._id}`,
+        `${API_BASE}/data/${dataType}/${editRecord.id || editRecord._id}`,
         { attributes: editFormData },
         {
           headers: { Authorization: `Bearer ${token}` },
