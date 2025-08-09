@@ -992,55 +992,6 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
-// Basic MapPreview component showing GeoJSON geometry
-function MapPreview({ geometry }) {
-  const mapRef = useRef(null);
-  const layerRef = useRef(null);
-
-  useEffect(() => {
-    if (!mapRef.current) {
-      mapRef.current = L.map('map-preview', {
-        center: [0, 0],
-        zoom: 2,
-        scrollWheelZoom: false,
-      });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(mapRef.current);
-    }
-
-    if (layerRef.current) {
-      layerRef.current.remove();
-      layerRef.current = null;
-    }
-
-    if (geometry) {
-      try {
-        const geojson = typeof geometry === 'string' ? JSON.parse(geometry) : geometry;
-        layerRef.current = L.geoJSON(geojson).addTo(mapRef.current);
-        mapRef.current.fitBounds(layerRef.current.getBounds());
-      } catch {
-        // Invalid GeoJSON
-      }
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, [geometry]);
-
-  return (
-    <div
-      id="map-preview"
-      style={{ height: '300px', width: '100%', marginTop: '1rem', borderRadius: '8px', border: '1px solid #ccc' }}
-    />
-  );
-}
-
 function DataManagement() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
@@ -1062,9 +1013,6 @@ function DataManagement() {
   // Shapefile upload file state
   const [file, setFile] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
-
-  // Selected item for preview
-  const [selectedGeometry, setSelectedGeometry] = useState(null);
 
   // Debounced filters to reduce API calls while typing
   const debouncedFilters = useDebounce(filters, 400);
@@ -1105,7 +1053,6 @@ function DataManagement() {
   useEffect(() => {
     setPage(1);
     setFilters({});
-    setSelectedGeometry(null);
   }, [dataType]);
 
   // Fetch data when dataType, page, debouncedFilters, or auth state changes
@@ -1172,7 +1119,6 @@ function DataManagement() {
   const goToPage = (pageNum) => {
     if (pageNum >= 1 && pageNum <= totalPages && pageNum !== page) {
       setPage(pageNum);
-      setSelectedGeometry(null);
     }
   };
 
@@ -1187,12 +1133,12 @@ function DataManagement() {
     try {
       const formData = new FormData();
       formData.append('shapefile', file);        // must match multer field name
-      formData.append('tableName', dataType);    // send current dataType as tableName
+      formData.append('tableName', dataType);    // send current dataType as tableName (optional)
 
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
-      await axios.post(`${API_BASE}/upload`, formData, {
+      await axios.post(`${API_BASE}/spatial/upload`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
@@ -1217,46 +1163,13 @@ function DataManagement() {
     }
   };
 
-  // === Placeholder Update Handler ===
+  // Dummy placeholders for Update and Delete handlers - implement as needed
   const handleUpdate = (id) => {
-    alert(`Update requested for id: ${id}. Implement editing logic here.`);
+    alert(`Update record with id: ${id}`);
   };
 
-  // === Placeholder Delete Handler ===
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this record?')) return;
-
-    setLoading(true);
-    setError('');
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('No authentication token found');
-
-      await axios.delete(`${API_BASE}/spatial/data/${dataType}/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      fetchData();
-    } catch (err) {
-      if (err.response?.status === 401) {
-        setError('Unauthorized: Please log in again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userId');
-      } else {
-        setError(err.response?.data?.message || 'Failed to delete data. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Show geometry in map when user clicks on a row (optional UX)
-  const handleRowClick = (data) => {
-    if (data.geometry) {
-      setSelectedGeometry(data.geometry);
-    } else {
-      setSelectedGeometry(null);
-    }
+  const handleDelete = (id) => {
+    alert(`Delete record with id: ${id}`);
   };
 
   if (authLoading) return <div className="p-4">Loading authentication...</div>;
@@ -1347,8 +1260,7 @@ function DataManagement() {
                   {dataList.map((data) => (
                     <tr
                       key={data.id || data._id || JSON.stringify(data)}
-                      className="border cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleRowClick(data)}
+                      className="border"
                     >
                       {attributeFields[dataType].map((field) => (
                         <td key={field} className="border p-2">
@@ -1357,19 +1269,13 @@ function DataManagement() {
                       ))}
                       <td className="border p-2">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUpdate(data.id || data._id);
-                          }}
+                          onClick={() => handleUpdate(data.id || data._id)}
                           className="records-action-btn edit bg-yellow-500 text-white px-2 py-1 rounded mr-2 hover:bg-yellow-600"
                         >
                           Update
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(data.id || data._id);
-                          }}
+                          onClick={() => handleDelete(data.id || data._id)}
                           className="records-action-btn delete bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
                         >
                           Delete
@@ -1417,13 +1323,7 @@ function DataManagement() {
           )}
         </div>
 
-        {/* Map Preview */}
-        {selectedGeometry && (
-          <div className="mt-6">
-            <h2 className="text-xl font-semibold mb-2">Geometry Preview</h2>
-            <MapPreview geometry={selectedGeometry} />
-          </div>
-        )}
+        {/* Your existing Create, Update, Delete handlers and MapPreview can be added here */}
       </div>
     </div>
   );
