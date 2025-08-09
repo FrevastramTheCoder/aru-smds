@@ -104,7 +104,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
-import MapComponent from './MapComponent'; // Adjust path if needed
+import MapComponent from '../components/MapComponent';
 
 function MapView() {
   const [spatialData, setSpatialData] = useState([]);
