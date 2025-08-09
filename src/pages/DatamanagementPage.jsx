@@ -997,7 +997,6 @@ function DataManagement() {
 
   const [dataType, setDataType] = useState('buildings');
   const [attributes, setAttributes] = useState({});
-  const [geometry, setGeometry] = useState('');
   const [dataList, setDataList] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1005,16 +1004,24 @@ function DataManagement() {
   // Pagination states
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(10); // items per page
+  const [limit] = useState(10);
 
-  // Filtering state - object with keys matching attributeFields[dataType]
   const [filters, setFilters] = useState({});
 
-  // Shapefile upload file state
+  // Upload state
   const [file, setFile] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  // Debounced filters to reduce API calls while typing
+  // Update modal state
+  const [editRecord, setEditRecord] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+
+  // Map preview state
+  const [mapRecord, setMapRecord] = useState(null);
+  const mapRef = useRef(null);
+  const leafletMap = useRef(null);
+  const geoJsonLayer = useRef(null);
+
   const debouncedFilters = useDebounce(filters, 400);
 
   const dataTypes = [
@@ -1047,15 +1054,17 @@ function DataManagement() {
     recreational_areas: ['size', 'condition'],
   };
 
-  const API_BASE = '/api';
+  // Use environment variable for API base URL (fallback to localhost)
+  const API_BASE =
+    import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
 
-  // Reset page and filters when dataType changes
+  // Reset page and filters on dataType change
   useEffect(() => {
     setPage(1);
     setFilters({});
   }, [dataType]);
 
-  // Fetch data when dataType, page, debouncedFilters, or auth state changes
+  // Fetch data
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
@@ -1068,7 +1077,6 @@ function DataManagement() {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
-      // Build query params for pagination and filters, excluding empty filters
       const params = {
         page,
         limit,
@@ -1077,7 +1085,7 @@ function DataManagement() {
         ),
       };
 
-      const response = await axios.get(`${API_BASE}/spatial/data/${dataType}`, {
+      const response = await axios.get(`${API_BASE}/data/${dataType}`, {
         headers: { Authorization: `Bearer ${token}` },
         params,
       });
@@ -1104,25 +1112,25 @@ function DataManagement() {
     } finally {
       setLoading(false);
     }
-  }, [dataType, page, debouncedFilters, limit]);
+  }, [dataType, page, debouncedFilters, limit, API_BASE]);
 
-  // Filter input change handler
+  // Filter change
   const handleFilterChange = (e) => {
     setFilters((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
     }));
-    setPage(1); // Reset to first page on filter change
+    setPage(1);
   };
 
-  // Pagination controls
+  // Pagination
   const goToPage = (pageNum) => {
     if (pageNum >= 1 && pageNum <= totalPages && pageNum !== page) {
       setPage(pageNum);
     }
   };
 
-  // === Shapefile Upload Handler ===
+  // Upload handler
   const handleFileUpload = async () => {
     if (!file) {
       setError('Please select a file to upload.');
@@ -1132,13 +1140,13 @@ function DataManagement() {
     setError('');
     try {
       const formData = new FormData();
-      formData.append('shapefile', file);        // must match multer field name
-      formData.append('tableName', dataType);    // send current dataType as tableName (optional)
+      formData.append('shapefile', file);
+      formData.append('tableName', dataType);
 
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
-      await axios.post(`${API_BASE}/spatial/upload`, formData, {
+      await axios.post(`${API_BASE}/upload`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
@@ -1146,7 +1154,6 @@ function DataManagement() {
       });
 
       setFile(null);
-      // Refresh data after successful upload
       fetchData();
     } catch (err) {
       if (err.response?.status === 404) {
@@ -1163,14 +1170,119 @@ function DataManagement() {
     }
   };
 
-  // Dummy placeholders for Update and Delete handlers - implement as needed
-  const handleUpdate = (id) => {
-    alert(`Update record with id: ${id}`);
+  // Delete handler
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this record?')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('No authentication token found');
+
+      await axios.delete(`${API_BASE}/data/${dataType}/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Refresh list after delete
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete record.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id) => {
-    alert(`Delete record with id: ${id}`);
+  // Open edit modal
+  const handleUpdate = (record) => {
+    setEditRecord(record);
+    // Deep copy attributes for editing
+    setEditFormData({ ...record.attributes });
   };
+
+  // Handle edit form changes
+  const handleEditChange = (e) => {
+    setEditFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  };
+
+  // Submit update
+  const submitUpdate = async () => {
+    if (!editRecord) return;
+    setLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('No authentication token found');
+
+      await axios.put(
+        `${API_BASE}/data/${dataType}/${editRecord.id || editRecord._id}`,
+        { attributes: editFormData },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setEditRecord(null);
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update record.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancel edit
+  const cancelEdit = () => {
+    setEditRecord(null);
+    setEditFormData({});
+  };
+
+  // Show map preview for geometry
+  const handleShowMap = (record) => {
+    setMapRecord(record);
+  };
+
+  // Initialize / update Leaflet map when mapRecord changes
+  useEffect(() => {
+    if (!mapRecord) return;
+
+    if (!leafletMap.current) {
+      leafletMap.current = L.map(mapRef.current, {
+        center: [0, 0],
+        zoom: 13,
+        layers: [
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+          }),
+        ],
+      });
+    }
+
+    // Remove old layer if exists
+    if (geoJsonLayer.current) {
+      geoJsonLayer.current.remove();
+    }
+
+    try {
+      geoJsonLayer.current = L.geoJSON(mapRecord.geometry, {
+        style: { color: 'blue' },
+      }).addTo(leafletMap.current);
+
+      leafletMap.current.fitBounds(geoJsonLayer.current.getBounds());
+    } catch {
+      setError('Invalid geometry data for map preview.');
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (geoJsonLayer.current) {
+        geoJsonLayer.current.remove();
+        geoJsonLayer.current = null;
+      }
+    };
+  }, [mapRecord]);
 
   if (authLoading) return <div className="p-4">Loading authentication...</div>;
 
@@ -1178,7 +1290,7 @@ function DataManagement() {
     return <div className="p-4 text-red-500">Please log in to manage data.</div>;
 
   return (
-    <div className="container mx-auto px-4 py-4 max-w-4xl">
+    <div className="container mx-auto px-4 py-4 max-w-5xl">
       <div className="card">
         <h1 className="card-title">Data Management</h1>
         {error && <p className="error-message text-red-500">{error}</p>}
@@ -1220,7 +1332,7 @@ function DataManagement() {
           </div>
         </div>
 
-        {/* === Shapefile Upload Section === */}
+        {/* Shapefile Upload Section */}
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-2">Upload Shapefile (.zip)</h2>
           <input
@@ -1267,10 +1379,10 @@ function DataManagement() {
                           {data.attributes?.[field] ?? 'N/A'}
                         </td>
                       ))}
-                      <td className="border p-2">
+                      <td className="border p-2 space-x-1">
                         <button
-                          onClick={() => handleUpdate(data.id || data._id)}
-                          className="records-action-btn edit bg-yellow-500 text-white px-2 py-1 rounded mr-2 hover:bg-yellow-600"
+                          onClick={() => handleUpdate(data)}
+                          className="records-action-btn edit bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600"
                         >
                           Update
                         </button>
@@ -1279,6 +1391,12 @@ function DataManagement() {
                           className="records-action-btn delete bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
                         >
                           Delete
+                        </button>
+                        <button
+                          onClick={() => handleShowMap(data)}
+                          className="records-action-btn map bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                        >
+                          Map
                         </button>
                       </td>
                     </tr>
@@ -1322,9 +1440,77 @@ function DataManagement() {
             </>
           )}
         </div>
-
-        {/* Your existing Create, Update, Delete handlers and MapPreview can be added here */}
       </div>
+
+      {/* Update Modal */}
+      {editRecord && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={cancelEdit}
+        >
+          <div
+            className="bg-white p-6 rounded shadow-lg max-w-lg w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-semibold mb-4">Update Record</h2>
+
+            {attributeFields[dataType].map((field) => (
+              <div key={`edit-${field}`} className="mb-3">
+                <label className="block font-medium mb-1">{field}</label>
+                <input
+                  type="text"
+                  name={field}
+                  value={editFormData[field] || ''}
+                  onChange={handleEditChange}
+                  className="input-field border p-2 rounded w-full"
+                />
+              </div>
+            ))}
+
+            <div className="flex justify-end space-x-3 mt-4">
+              <button
+                onClick={cancelEdit}
+                className="btn-cancel px-4 py-2 bg-gray-400 rounded hover:bg-gray-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitUpdate}
+                className="btn-submit px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Map Preview Modal */}
+      {mapRecord && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40"
+          onClick={() => setMapRecord(null)}
+        >
+          <div
+            className="bg-white rounded shadow-lg w-11/12 max-w-4xl h-96"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-2 border-b">
+              <h3 className="text-lg font-semibold">
+                Map Preview - {dataType} Record
+              </h3>
+              <button
+                onClick={() => setMapRecord(null)}
+                className="text-xl font-bold px-3 hover:text-red-600"
+                aria-label="Close Map Preview"
+              >
+                &times;
+              </button>
+            </div>
+            <div ref={mapRef} style={{ height: 'calc(100% - 40px)' }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
