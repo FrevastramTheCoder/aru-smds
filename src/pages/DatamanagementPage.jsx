@@ -975,49 +975,585 @@
 
 //almost thereeeeeeeeeeeeeeeee hopeeeeeee
 // export default DataManagement;
+// import React, { useState, useEffect, useRef, useCallback } from 'react';
+// import axios from 'axios';
+// import { useAuth } from '../context/AuthContext';
+// import L from 'leaflet';
+// import 'leaflet/dist/leaflet.css';
+
+// // Simple debounce hook
+// function useDebounce(value, delay) {
+//   const [debouncedValue, setDebouncedValue] = useState(value);
+
+//   useEffect(() => {
+//     const handler = setTimeout(() => setDebouncedValue(value), delay);
+//     return () => clearTimeout(handler);
+//   }, [value, delay]);
+
+//   return debouncedValue;
+// }
+
+// function DataManagement() {
+//   const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+//   const [dataType, setDataType] = useState('buildings');
+//   const [attributes, setAttributes] = useState({});
+//   const [dataList, setDataList] = useState([]);
+//   const [error, setError] = useState('');
+//   const [loading, setLoading] = useState(false);
+
+//   // Pagination states
+//   const [page, setPage] = useState(1);
+//   const [totalPages, setTotalPages] = useState(1);
+//   const [limit] = useState(10);
+
+//   const [filters, setFilters] = useState({});
+
+//   // Upload state
+//   const [file, setFile] = useState(null);
+//   const [uploadLoading, setUploadLoading] = useState(false);
+
+//   // Update modal state
+//   const [editRecord, setEditRecord] = useState(null);
+//   const [editFormData, setEditFormData] = useState({});
+
+//   // Map preview state
+//   const [mapRecord, setMapRecord] = useState(null);
+//   const mapRef = useRef(null);
+//   const leafletMap = useRef(null);
+//   const geoJsonLayer = useRef(null);
+
+//   const debouncedFilters = useDebounce(filters, 400);
+
+//   const dataTypes = [
+//     { key: 'buildings', label: 'Buildings' },
+//     { key: 'roads', label: 'Roads' },
+//     { key: 'footpaths', label: 'Footpaths' },
+//     { key: 'vegetation', label: 'Vegetation' },
+//     { key: 'parking', label: 'Parking' },
+//     { key: 'solid_waste', label: 'Solid Waste' },
+//     { key: 'electricity', label: 'Electricity' },
+//     { key: 'water_supply', label: 'Water Supply' },
+//     { key: 'drainage', label: 'Drainage System' },
+//     { key: 'vimbweta', label: 'Vimbweta' },
+//     { key: 'security', label: 'Security Lights' },
+//     { key: 'recreational_areas', label: 'Recreational Areas' },
+//   ];
+
+//   const attributeFields = {
+//     buildings: ['name', 'floor', 'size', 'offices', 'use', 'condition'],
+//     roads: ['road_type', 'condition', 'uses'],
+//     footpaths: ['condition', 'uses'],
+//     vegetation: ['type'],
+//     parking: ['type', 'use', 'condition'],
+//     solid_waste: ['type', 'condition'],
+//     electricity: ['condition'],
+//     water_supply: ['sources', 'accommodate'],
+//     drainage: ['character', 'nature', 'type', 'width', 'length'],
+//     vimbweta: ['condition', 'use'],
+//     security: ['condition'],
+//     recreational_areas: ['size', 'condition'],
+//   };
+
+//   // Use environment variable for API base URL (fallback to localhost)
+//   const API_BASE =
+//     import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
+
+//   // Reset page and filters on dataType change
+//   useEffect(() => {
+//     setPage(1);
+//     setFilters({});
+//   }, [dataType]);
+
+//   // Fetch data
+//   useEffect(() => {
+//     if (isAuthenticated) {
+//       fetchData();
+//     }
+//   }, [dataType, page, debouncedFilters, isAuthenticated]);
+
+//   const fetchData = useCallback(async () => {
+//     setLoading(true);
+//     try {
+//       const token = localStorage.getItem('token');
+//       if (!token) throw new Error('No authentication token found');
+
+//       const params = {
+//         page,
+//         limit,
+//         ...Object.fromEntries(
+//           Object.entries(debouncedFilters).filter(([, v]) => v !== '' && v != null)
+//         ),
+//       };
+
+//       const response = await axios.get(`${API_BASE}/data/${dataType}`, {
+//         headers: { Authorization: `Bearer ${token}` },
+//         params,
+//       });
+
+//       if (Array.isArray(response.data.data)) {
+//         setDataList(response.data.data);
+//         const totalRecords = response.data.total || 0;
+//         setTotalPages(Math.max(1, Math.ceil(totalRecords / limit)));
+//         setError('');
+//       } else {
+//         setDataList([]);
+//         setTotalPages(1);
+//         setError('No valid data returned from server.');
+//       }
+//     } catch (err) {
+//       if (err.response?.status === 401) {
+//         setError('Unauthorized: Please log in again.');
+//         localStorage.removeItem('token');
+//         localStorage.removeItem('userId');
+//       } else {
+//         setError(err.response?.data?.message || 'Failed to load data. Please try again.');
+//       }
+//       setDataList([]);
+//     } finally {
+//       setLoading(false);
+//     }
+//   }, [dataType, page, debouncedFilters, limit, API_BASE]);
+
+//   // Filter change
+//   const handleFilterChange = (e) => {
+//     setFilters((prev) => ({
+//       ...prev,
+//       [e.target.name]: e.target.value,
+//     }));
+//     setPage(1);
+//   };
+
+//   // Pagination
+//   const goToPage = (pageNum) => {
+//     if (pageNum >= 1 && pageNum <= totalPages && pageNum !== page) {
+//       setPage(pageNum);
+//     }
+//   };
+
+//   // Upload handler
+//   const handleFileUpload = async () => {
+//     if (!file) {
+//       setError('Please select a file to upload.');
+//       return;
+//     }
+//     setUploadLoading(true);
+//     setError('');
+//     try {
+//       const formData = new FormData();
+//       formData.append('shapefile', file);
+//       formData.append('tableName', dataType);
+
+//       const token = localStorage.getItem('token');
+//       if (!token) throw new Error('No authentication token found');
+
+//       await axios.post(`${API_BASE}/upload`, formData, {
+//         headers: {
+//           Authorization: `Bearer ${token}`,
+//           'Content-Type': 'multipart/form-data',
+//         },
+//       });
+
+//       setFile(null);
+//       fetchData();
+//     } catch (err) {
+//       if (err.response?.status === 404) {
+//         setError('Upload endpoint not found. Please check server configuration.');
+//       } else if (err.response?.status === 401) {
+//         setError('Unauthorized: Please log in again.');
+//         localStorage.removeItem('token');
+//         localStorage.removeItem('userId');
+//       } else {
+//         setError(err.response?.data?.error || 'Failed to upload shapefile. Please try again.');
+//       }
+//     } finally {
+//       setUploadLoading(false);
+//     }
+//   };
+
+//   // Delete handler
+//   const handleDelete = async (id) => {
+//     if (!window.confirm('Are you sure you want to delete this record?')) return;
+//     setLoading(true);
+//     setError('');
+//     try {
+//       const token = localStorage.getItem('token');
+//       if (!token) throw new Error('No authentication token found');
+
+//       await axios.delete(`${API_BASE}/data/${dataType}/${id}`, {
+//         headers: { Authorization: `Bearer ${token}` },
+//       });
+
+//       // Refresh list after delete
+//       fetchData();
+//     } catch (err) {
+//       setError(err.response?.data?.error || 'Failed to delete record.');
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   // Open edit modal
+//   const handleUpdate = (record) => {
+//     setEditRecord(record);
+//     // Deep copy attributes for editing
+//     setEditFormData({ ...record.attributes });
+//   };
+
+//   // Handle edit form changes
+//   const handleEditChange = (e) => {
+//     setEditFormData((prev) => ({
+//       ...prev,
+//       [e.target.name]: e.target.value,
+//     }));
+//   };
+
+//   // Submit update
+//   const submitUpdate = async () => {
+//     if (!editRecord) return;
+//     setLoading(true);
+//     setError('');
+//     try {
+//       const token = localStorage.getItem('token');
+//       if (!token) throw new Error('No authentication token found');
+
+//       await axios.put(
+//         `${API_BASE}/data/${dataType}/${editRecord.id || editRecord._id}`,
+//         { attributes: editFormData },
+//         {
+//           headers: { Authorization: `Bearer ${token}` },
+//         }
+//       );
+
+//       setEditRecord(null);
+//       fetchData();
+//     } catch (err) {
+//       setError(err.response?.data?.error || 'Failed to update record.');
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   // Cancel edit
+//   const cancelEdit = () => {
+//     setEditRecord(null);
+//     setEditFormData({});
+//   };
+
+//   // Show map preview for geometry
+//   const handleShowMap = (record) => {
+//     setMapRecord(record);
+//   };
+
+//   // Initialize / update Leaflet map when mapRecord changes
+//   useEffect(() => {
+//     if (!mapRecord) return;
+
+//     if (!leafletMap.current) {
+//       leafletMap.current = L.map(mapRef.current, {
+//         center: [0, 0],
+//         zoom: 13,
+//         layers: [
+//           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+//             attribution: '&copy; OpenStreetMap contributors',
+//           }),
+//         ],
+//       });
+//     }
+
+//     // Remove old layer if exists
+//     if (geoJsonLayer.current) {
+//       geoJsonLayer.current.remove();
+//     }
+
+//     try {
+//       geoJsonLayer.current = L.geoJSON(mapRecord.geometry, {
+//         style: { color: 'blue' },
+//       }).addTo(leafletMap.current);
+
+//       leafletMap.current.fitBounds(geoJsonLayer.current.getBounds());
+//     } catch {
+//       setError('Invalid geometry data for map preview.');
+//     }
+
+//     // Cleanup on unmount
+//     return () => {
+//       if (geoJsonLayer.current) {
+//         geoJsonLayer.current.remove();
+//         geoJsonLayer.current = null;
+//       }
+//     };
+//   }, [mapRecord]);
+
+//   if (authLoading) return <div className="p-4">Loading authentication...</div>;
+
+//   if (!isAuthenticated)
+//     return <div className="p-4 text-red-500">Please log in to manage data.</div>;
+
+//   return (
+//     <div className="container mx-auto px-4 py-4 max-w-5xl">
+//       <div className="card">
+//         <h1 className="card-title">Data Management</h1>
+//         {error && <p className="error-message text-red-500">{error}</p>}
+//         {(loading || uploadLoading) && <div className="loading-spinner">Loading...</div>}
+
+//         {/* Data Type Selection */}
+//         <div className="mb-4">
+//           <label className="input-label font-semibold">Data Type</label>
+//           <select
+//             value={dataType}
+//             onChange={(e) => setDataType(e.target.value)}
+//             className="input-field border p-2 rounded w-full"
+//           >
+//             {dataTypes.map(({ key, label }) => (
+//               <option key={key} value={key}>
+//                 {label}
+//               </option>
+//             ))}
+//           </select>
+//         </div>
+
+//         {/* Filtering inputs */}
+//         <div className="mb-6">
+//           <h2 className="text-lg font-semibold mb-2">Filter Data</h2>
+//           <div className="grid grid-cols-2 gap-4">
+//             {attributeFields[dataType].map((field) => (
+//               <div key={`filter-${field}`}>
+//                 <label className="input-label font-medium">{field}</label>
+//                 <input
+//                   type="text"
+//                   name={field}
+//                   value={filters[field] || ''}
+//                   onChange={handleFilterChange}
+//                   className="input-field border p-2 rounded w-full"
+//                   placeholder={`Filter by ${field}`}
+//                 />
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+
+//         {/* Shapefile Upload Section */}
+//         <div className="mb-6">
+//           <h2 className="text-xl font-semibold mb-2">Upload Shapefile (.zip)</h2>
+//           <input
+//             type="file"
+//             accept=".zip"
+//             onChange={(e) => setFile(e.target.files[0])}
+//             className="input-field border p-2 rounded"
+//           />
+//           <button
+//             onClick={handleFileUpload}
+//             disabled={uploadLoading || !file}
+//             className="btn-primary bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600 disabled:bg-gray-400"
+//           >
+//             Upload
+//           </button>
+//         </div>
+
+//         {/* Data List */}
+//         <div>
+//           <h2 className="text-xl font-semibold mb-2">Data List</h2>
+//           {dataList.length === 0 ? (
+//             <p>No data available.</p>
+//           ) : (
+//             <>
+//               <table className="table w-full border-collapse mb-4">
+//                 <thead>
+//                   <tr>
+//                     {attributeFields[dataType].map((field) => (
+//                       <th key={field} className="border p-2">
+//                         {field}
+//                       </th>
+//                     ))}
+//                     <th className="border p-2">Actions</th>
+//                   </tr>
+//                 </thead>
+//                 <tbody>
+//                   {dataList.map((data) => (
+//                     <tr
+//                       key={data.id || data._id || JSON.stringify(data)}
+//                       className="border"
+//                     >
+//                       {attributeFields[dataType].map((field) => (
+//                         <td key={field} className="border p-2">
+//                           {data.attributes?.[field] ?? 'N/A'}
+//                         </td>
+//                       ))}
+//                       <td className="border p-2 space-x-1">
+//                         <button
+//                           onClick={() => handleUpdate(data)}
+//                           className="records-action-btn edit bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600"
+//                         >
+//                           Update
+//                         </button>
+//                         <button
+//                           onClick={() => handleDelete(data.id || data._id)}
+//                           className="records-action-btn delete bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+//                         >
+//                           Delete
+//                         </button>
+//                         <button
+//                           onClick={() => handleShowMap(data)}
+//                           className="records-action-btn map bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+//                         >
+//                           Map
+//                         </button>
+//                       </td>
+//                     </tr>
+//                   ))}
+//                 </tbody>
+//               </table>
+
+//               {/* Pagination Controls */}
+//               <div className="pagination flex justify-center items-center space-x-2">
+//                 <button
+//                   onClick={() => goToPage(page - 1)}
+//                   disabled={page === 1}
+//                   className="px-3 py-1 rounded bg-gray-300 disabled:bg-gray-100"
+//                 >
+//                   Prev
+//                 </button>
+
+//                 {[...Array(totalPages)].map((_, idx) => {
+//                   const pageNum = idx + 1;
+//                   return (
+//                     <button
+//                       key={pageNum}
+//                       onClick={() => goToPage(pageNum)}
+//                       className={`px-3 py-1 rounded ${
+//                         pageNum === page ? 'bg-blue-500 text-white' : 'bg-gray-200'
+//                       }`}
+//                     >
+//                       {pageNum}
+//                     </button>
+//                   );
+//                 })}
+
+//                 <button
+//                   onClick={() => goToPage(page + 1)}
+//                   disabled={page === totalPages}
+//                   className="px-3 py-1 rounded bg-gray-300 disabled:bg-gray-100"
+//                 >
+//                   Next
+//                 </button>
+//               </div>
+//             </>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Update Modal */}
+//       {editRecord && (
+//         <div
+//           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+//           onClick={cancelEdit}
+//         >
+//           <div
+//             className="bg-white p-6 rounded shadow-lg max-w-lg w-full"
+//             onClick={(e) => e.stopPropagation()}
+//           >
+//             <h2 className="text-xl font-semibold mb-4">Update Record</h2>
+
+//             {attributeFields[dataType].map((field) => (
+//               <div key={`edit-${field}`} className="mb-3">
+//                 <label className="block font-medium mb-1">{field}</label>
+//                 <input
+//                   type="text"
+//                   name={field}
+//                   value={editFormData[field] || ''}
+//                   onChange={handleEditChange}
+//                   className="input-field border p-2 rounded w-full"
+//                 />
+//               </div>
+//             ))}
+
+//             <div className="flex justify-end space-x-3 mt-4">
+//               <button
+//                 onClick={cancelEdit}
+//                 className="btn-cancel px-4 py-2 bg-gray-400 rounded hover:bg-gray-500"
+//               >
+//                 Cancel
+//               </button>
+//               <button
+//                 onClick={submitUpdate}
+//                 className="btn-submit px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+//               >
+//                 Save
+//               </button>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Map Preview Modal */}
+//       {mapRecord && (
+//         <div
+//           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40"
+//           onClick={() => setMapRecord(null)}
+//         >
+//           <div
+//             className="bg-white rounded shadow-lg w-11/12 max-w-4xl h-96"
+//             onClick={(e) => e.stopPropagation()}
+//           >
+//             <div className="flex justify-between items-center p-2 border-b">
+//               <h3 className="text-lg font-semibold">
+//                 Map Preview - {dataType} Record
+//               </h3>
+//               <button
+//                 onClick={() => setMapRecord(null)}
+//                 className="text-xl font-bold px-3 hover:text-red-600"
+//                 aria-label="Close Map Preview"
+//               >
+//                 &times;
+//               </button>
+//             </div>
+//             <div ref={mapRef} style={{ height: 'calc(100% - 40px)' }} />
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
+// export default DataManagement;
+
+///advanced version
+// src/components/DataManagement.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Simple debounce hook
+// debounce hook
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
-
   useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
+    const h = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(h);
   }, [value, delay]);
-
   return debouncedValue;
 }
 
-function DataManagement() {
+export default function DataManagement() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [dataType, setDataType] = useState('buildings');
-  const [attributes, setAttributes] = useState({});
   const [dataList, setDataList] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Pagination states
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(10);
-
   const [filters, setFilters] = useState({});
-
-  // Upload state
   const [file, setFile] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  // Update modal state
   const [editRecord, setEditRecord] = useState(null);
   const [editFormData, setEditFormData] = useState({});
 
-  // Map preview state
   const [mapRecord, setMapRecord] = useState(null);
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
@@ -1055,46 +1591,38 @@ function DataManagement() {
     recreational_areas: ['size', 'condition'],
   };
 
-  // Use environment variable for API base URL (fallback to localhost)
-  const API_BASE =
-    import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
+  const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
 
-  // Reset page and filters on dataType change
   useEffect(() => {
     setPage(1);
     setFilters({});
   }, [dataType]);
 
-  // Fetch data
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchData();
-    }
+    if (isAuthenticated) fetchData();
   }, [dataType, page, debouncedFilters, isAuthenticated]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error('No authentication token found');
+      if (!token) throw new Error('No auth token');
 
       const params = {
         page,
         limit,
-        ...Object.fromEntries(
-          Object.entries(debouncedFilters).filter(([, v]) => v !== '' && v != null)
-        ),
+        ...Object.fromEntries(Object.entries(debouncedFilters).filter(([, v]) => v !== '' && v != null))
       };
 
-      const response = await axios.get(`${API_BASE}/data/${dataType}`, {
+      const resp = await axios.get(`${API_BASE}/data/${dataType}`, {
         headers: { Authorization: `Bearer ${token}` },
-        params,
+        params
       });
 
-      if (Array.isArray(response.data.data)) {
-        setDataList(response.data.data);
-        const totalRecords = response.data.total || 0;
-        setTotalPages(Math.max(1, Math.ceil(totalRecords / limit)));
+      // expect { page, limit, total, totalPages, data }
+      if (resp.data && Array.isArray(resp.data.data)) {
+        setDataList(resp.data.data);
+        setTotalPages(resp.data.totalPages || Math.max(1, Math.ceil((resp.data.total || 0) / limit)));
         setError('');
       } else {
         setDataList([]);
@@ -1102,12 +1630,13 @@ function DataManagement() {
         setError('No valid data returned from server.');
       }
     } catch (err) {
+      console.error(err);
       if (err.response?.status === 401) {
         setError('Unauthorized: Please log in again.');
         localStorage.removeItem('token');
         localStorage.removeItem('userId');
       } else {
-        setError(err.response?.data?.message || 'Failed to load data. Please try again.');
+        setError(err.response?.data?.error || err.message || 'Failed to load data.');
       }
       setDataList([]);
     } finally {
@@ -1115,168 +1644,128 @@ function DataManagement() {
     }
   }, [dataType, page, debouncedFilters, limit, API_BASE]);
 
-  // Filter change
   const handleFilterChange = (e) => {
-    setFilters((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
     setPage(1);
   };
 
-  // Pagination
   const goToPage = (pageNum) => {
-    if (pageNum >= 1 && pageNum <= totalPages && pageNum !== page) {
-      setPage(pageNum);
-    }
+    if (pageNum >= 1 && pageNum <= totalPages && pageNum !== page) setPage(pageNum);
   };
 
-  // Upload handler
   const handleFileUpload = async () => {
     if (!file) {
-      setError('Please select a file to upload.');
+      setError('Please select a file.');
       return;
     }
     setUploadLoading(true);
     setError('');
     try {
-      const formData = new FormData();
-      formData.append('shapefile', file);
-      formData.append('tableName', dataType);
-
       const token = localStorage.getItem('token');
-      if (!token) throw new Error('No authentication token found');
+      if (!token) throw new Error('No auth token');
 
-      await axios.post(`${API_BASE}/upload`, formData, {
+      const fd = new FormData();
+      fd.append('shapefile', file);
+      fd.append('tableName', dataType);
+
+      await axios.post(`${API_BASE}/upload`, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'multipart/form-data'
         },
+        timeout: 120000 // shapefile upload might take longer
       });
 
       setFile(null);
       fetchData();
     } catch (err) {
-      if (err.response?.status === 404) {
-        setError('Upload endpoint not found. Please check server configuration.');
-      } else if (err.response?.status === 401) {
-        setError('Unauthorized: Please log in again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userId');
-      } else {
-        setError(err.response?.data?.error || 'Failed to upload shapefile. Please try again.');
-      }
+      console.error(err);
+      setError(err.response?.data?.error || err.message || 'Upload failed.');
     } finally {
       setUploadLoading(false);
     }
   };
 
-  // Delete handler
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this record?')) return;
+    if (!window.confirm('Delete this record?')) return;
     setLoading(true);
     setError('');
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error('No authentication token found');
-
-      await axios.delete(`${API_BASE}/data/${dataType}/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // Refresh list after delete
+      if (!token) throw new Error('No auth token');
+      await axios.delete(`${API_BASE}/data/${dataType}/${id}`, { headers: { Authorization: `Bearer ${token}` } });
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete record.');
+      console.error(err);
+      setError(err.response?.data?.error || 'Delete failed.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Open edit modal
   const handleUpdate = (record) => {
     setEditRecord(record);
-    // Deep copy attributes for editing
     setEditFormData({ ...record.attributes });
   };
 
-  // Handle edit form changes
   const handleEditChange = (e) => {
-    setEditFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setEditFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Submit update
   const submitUpdate = async () => {
     if (!editRecord) return;
     setLoading(true);
     setError('');
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error('No authentication token found');
-
-      await axios.put(
-        `${API_BASE}/data/${dataType}/${editRecord.id || editRecord._id}`,
-        { attributes: editFormData },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
+      if (!token) throw new Error('No auth token');
+      await axios.put(`${API_BASE}/data/${dataType}/${editRecord.id}`, { attributes: editFormData }, { headers: { Authorization: `Bearer ${token}` } });
       setEditRecord(null);
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update record.');
+      console.error(err);
+      setError(err.response?.data?.error || 'Update failed.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Cancel edit
   const cancelEdit = () => {
     setEditRecord(null);
     setEditFormData({});
   };
 
-  // Show map preview for geometry
   const handleShowMap = (record) => {
+    // record.geometry should be a GeoJSON geometry object
+    if (!record || !record.geometry) {
+      setError('No geometry to show');
+      return;
+    }
     setMapRecord(record);
   };
 
-  // Initialize / update Leaflet map when mapRecord changes
+  // Leaflet map render
   useEffect(() => {
     if (!mapRecord) return;
 
     if (!leafletMap.current) {
-      leafletMap.current = L.map(mapRef.current, {
-        center: [0, 0],
-        zoom: 13,
-        layers: [
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-          }),
-        ],
-      });
+      leafletMap.current = L.map(mapRef.current, { center: [0, 0], zoom: 13 });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(leafletMap.current);
     }
 
-    // Remove old layer if exists
     if (geoJsonLayer.current) {
       geoJsonLayer.current.remove();
+      geoJsonLayer.current = null;
     }
 
     try {
-      geoJsonLayer.current = L.geoJSON(mapRecord.geometry, {
-        style: { color: 'blue' },
-      }).addTo(leafletMap.current);
-
+      geoJsonLayer.current = L.geoJSON(mapRecord.geometry).addTo(leafletMap.current);
       leafletMap.current.fitBounds(geoJsonLayer.current.getBounds());
-    } catch {
-      setError('Invalid geometry data for map preview.');
+    } catch (err) {
+      setError('Invalid geometry for map preview.');
+      console.error(err);
     }
 
-    // Cleanup on unmount
     return () => {
       if (geoJsonLayer.current) {
         geoJsonLayer.current.remove();
@@ -1286,227 +1775,104 @@ function DataManagement() {
   }, [mapRecord]);
 
   if (authLoading) return <div className="p-4">Loading authentication...</div>;
-
-  if (!isAuthenticated)
-    return <div className="p-4 text-red-500">Please log in to manage data.</div>;
+  if (!isAuthenticated) return <div className="p-4 text-red-500">Please log in to manage data.</div>;
 
   return (
     <div className="container mx-auto px-4 py-4 max-w-5xl">
       <div className="card">
         <h1 className="card-title">Data Management</h1>
-        {error && <p className="error-message text-red-500">{error}</p>}
-        {(loading || uploadLoading) && <div className="loading-spinner">Loading...</div>}
+        {error && <p className="text-red-500 mb-2">{error}</p>}
+        {(loading || uploadLoading) && <div className="mb-2">Loading...</div>}
 
-        {/* Data Type Selection */}
         <div className="mb-4">
-          <label className="input-label font-semibold">Data Type</label>
-          <select
-            value={dataType}
-            onChange={(e) => setDataType(e.target.value)}
-            className="input-field border p-2 rounded w-full"
-          >
-            {dataTypes.map(({ key, label }) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
+          <label className="font-semibold block mb-1">Data Type</label>
+          <select value={dataType} onChange={(e) => setDataType(e.target.value)} className="border p-2 rounded w-full">
+            {dataTypes.map(dt => <option key={dt.key} value={dt.key}>{dt.label}</option>)}
           </select>
         </div>
 
-        {/* Filtering inputs */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-2">Filter Data</h2>
           <div className="grid grid-cols-2 gap-4">
-            {attributeFields[dataType].map((field) => (
-              <div key={`filter-${field}`}>
-                <label className="input-label font-medium">{field}</label>
-                <input
-                  type="text"
-                  name={field}
-                  value={filters[field] || ''}
-                  onChange={handleFilterChange}
-                  className="input-field border p-2 rounded w-full"
-                  placeholder={`Filter by ${field}`}
-                />
+            {attributeFields[dataType].map(field => (
+              <div key={field}>
+                <label className="block font-medium mb-1">{field}</label>
+                <input type="text" name={field} value={filters[field] || ''} onChange={handleFilterChange} placeholder={`Filter by ${field}`} className="border p-2 rounded w-full" />
               </div>
             ))}
           </div>
         </div>
 
-        {/* Shapefile Upload Section */}
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-2">Upload Shapefile (.zip)</h2>
-          <input
-            type="file"
-            accept=".zip"
-            onChange={(e) => setFile(e.target.files[0])}
-            className="input-field border p-2 rounded"
-          />
-          <button
-            onClick={handleFileUpload}
-            disabled={uploadLoading || !file}
-            className="btn-primary bg-blue-500 text-white px-4 py-2 rounded mt-2 hover:bg-blue-600 disabled:bg-gray-400"
-          >
-            Upload
-          </button>
+          <input type="file" accept=".zip" onChange={(e) => setFile(e.target.files[0])} />
+          <button onClick={handleFileUpload} disabled={uploadLoading || !file} className="ml-2 px-4 py-2 bg-blue-600 text-white rounded">Upload</button>
         </div>
 
-        {/* Data List */}
         <div>
           <h2 className="text-xl font-semibold mb-2">Data List</h2>
-          {dataList.length === 0 ? (
-            <p>No data available.</p>
-          ) : (
+          {dataList.length === 0 ? <p>No data available.</p> : (
             <>
-              <table className="table w-full border-collapse mb-4">
+              <table className="w-full border-collapse mb-4">
                 <thead>
                   <tr>
-                    {attributeFields[dataType].map((field) => (
-                      <th key={field} className="border p-2">
-                        {field}
-                      </th>
-                    ))}
+                    {attributeFields[dataType].map(f => <th key={f} className="border p-2">{f}</th>)}
                     <th className="border p-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dataList.map((data) => (
-                    <tr
-                      key={data.id || data._id || JSON.stringify(data)}
-                      className="border"
-                    >
-                      {attributeFields[dataType].map((field) => (
-                        <td key={field} className="border p-2">
-                          {data.attributes?.[field] ?? 'N/A'}
-                        </td>
-                      ))}
-                      <td className="border p-2 space-x-1">
-                        <button
-                          onClick={() => handleUpdate(data)}
-                          className="records-action-btn edit bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600"
-                        >
-                          Update
-                        </button>
-                        <button
-                          onClick={() => handleDelete(data.id || data._id)}
-                          className="records-action-btn delete bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => handleShowMap(data)}
-                          className="records-action-btn map bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                        >
-                          Map
-                        </button>
+                  {dataList.map(d => (
+                    <tr key={d.id || JSON.stringify(d)} className="border">
+                      {attributeFields[dataType].map(f => <td key={f} className="border p-2">{d.attributes?.[f] ?? 'N/A'}</td>)}
+                      <td className="border p-2">
+                        <button onClick={() => handleUpdate(d)} className="px-2 py-1 bg-yellow-500 text-white rounded mr-1">Update</button>
+                        <button onClick={() => handleDelete(d.id)} className="px-2 py-1 bg-red-500 text-white rounded mr-1">Delete</button>
+                        <button onClick={() => handleShowMap(d)} className="px-2 py-1 bg-green-500 text-white rounded">Map</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
-              {/* Pagination Controls */}
-              <div className="pagination flex justify-center items-center space-x-2">
-                <button
-                  onClick={() => goToPage(page - 1)}
-                  disabled={page === 1}
-                  className="px-3 py-1 rounded bg-gray-300 disabled:bg-gray-100"
-                >
-                  Prev
-                </button>
-
-                {[...Array(totalPages)].map((_, idx) => {
-                  const pageNum = idx + 1;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => goToPage(pageNum)}
-                      className={`px-3 py-1 rounded ${
-                        pageNum === page ? 'bg-blue-500 text-white' : 'bg-gray-200'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
+              <div className="flex justify-center items-center space-x-2">
+                <button onClick={() => goToPage(page - 1)} disabled={page === 1} className="px-3 py-1 rounded bg-gray-300">Prev</button>
+                {[...Array(totalPages)].map((_, i) => {
+                  const p = i + 1;
+                  return <button key={p} onClick={() => goToPage(p)} className={`px-3 py-1 rounded ${p === page ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>{p}</button>;
                 })}
-
-                <button
-                  onClick={() => goToPage(page + 1)}
-                  disabled={page === totalPages}
-                  className="px-3 py-1 rounded bg-gray-300 disabled:bg-gray-100"
-                >
-                  Next
-                </button>
+                <button onClick={() => goToPage(page + 1)} disabled={page === totalPages} className="px-3 py-1 rounded bg-gray-300">Next</button>
               </div>
             </>
           )}
         </div>
       </div>
 
-      {/* Update Modal */}
+      {/* Edit Modal */}
       {editRecord && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={cancelEdit}
-        >
-          <div
-            className="bg-white p-6 rounded shadow-lg max-w-lg w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={cancelEdit}>
+          <div className="bg-white p-6 rounded shadow-lg max-w-lg w-full" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-semibold mb-4">Update Record</h2>
-
-            {attributeFields[dataType].map((field) => (
-              <div key={`edit-${field}`} className="mb-3">
+            {attributeFields[dataType].map(field => (
+              <div key={field} className="mb-3">
                 <label className="block font-medium mb-1">{field}</label>
-                <input
-                  type="text"
-                  name={field}
-                  value={editFormData[field] || ''}
-                  onChange={handleEditChange}
-                  className="input-field border p-2 rounded w-full"
-                />
+                <input type="text" name={field} value={editFormData[field] || ''} onChange={handleEditChange} className="border p-2 rounded w-full" />
               </div>
             ))}
-
             <div className="flex justify-end space-x-3 mt-4">
-              <button
-                onClick={cancelEdit}
-                className="btn-cancel px-4 py-2 bg-gray-400 rounded hover:bg-gray-500"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitUpdate}
-                className="btn-submit px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Save
-              </button>
+              <button onClick={cancelEdit} className="px-4 py-2 bg-gray-400 rounded">Cancel</button>
+              <button onClick={submitUpdate} className="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Map Preview Modal */}
+      {/* Map Modal */}
       {mapRecord && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40"
-          onClick={() => setMapRecord(null)}
-        >
-          <div
-            className="bg-white rounded shadow-lg w-11/12 max-w-4xl h-96"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40" onClick={() => setMapRecord(null)}>
+          <div className="bg-white rounded shadow-lg w-11/12 max-w-4xl h-96" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-2 border-b">
-              <h3 className="text-lg font-semibold">
-                Map Preview - {dataType} Record
-              </h3>
-              <button
-                onClick={() => setMapRecord(null)}
-                className="text-xl font-bold px-3 hover:text-red-600"
-                aria-label="Close Map Preview"
-              >
-                &times;
-              </button>
+              <h3 className="text-lg font-semibold">Map Preview - {dataType}</h3>
+              <button onClick={() => setMapRecord(null)} className="text-xl font-bold px-3">&times;</button>
             </div>
             <div ref={mapRef} style={{ height: 'calc(100% - 40px)' }} />
           </div>
@@ -1515,5 +1881,3 @@ function DataManagement() {
     </div>
   );
 }
-
-export default DataManagement;
