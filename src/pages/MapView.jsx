@@ -435,174 +435,7 @@
 // export default MapView;
 // // src/routes/MapView.jsx
 
-// //kumekucha 
-// import React, { useEffect, useRef, useState, useCallback } from 'react';
-// import { useLocation } from 'react-router-dom';
-// import axios from 'axios';
-// import MapComponent from '../components/MapComponent';
-
-// function debounce(fn, wait) {
-//   let t;
-//   return (...args) => {
-//     clearTimeout(t);
-//     t = setTimeout(() => fn(...args), wait);
-//   };
-// }
-
-// function MapView() {
-//   const [spatialData, setSpatialData] = useState([]);
-//   const [selectedType, setSelectedType] = useState('buildings');
-//   const [error, setError] = useState('');
-//   const [loading, setLoading] = useState(false);
-//   const location = useLocation();
-
-//   const categoryToTypeMap = {
-//     buildings: 'buildings',
-//     roads: 'roads',
-//     footpaths: 'footpaths',
-//     vegetation: 'vegetation',
-//     parking: 'parking',
-//     'solid-waste': 'solid_waste',
-//     electricity: 'electricity',
-//     'water-supply': 'water_supply',
-//     'drainage-system': 'drainage',
-//     vimbweta: 'vimbweta',
-//     'security-lights': 'security',
-//     'recreational-areas': 'recreational_areas',
-//   };
-
-//   const dataTypes = [
-//     { key: 'buildings', label: 'Buildings' },
-//     { key: 'roads', label: 'Roads' },
-//     { key: 'footpaths', label: 'Footpaths' },
-//     { key: 'vegetation', label: 'Vegetation' },
-//     { key: 'parking', label: 'Parking' },
-//     { key: 'solid_waste', label: 'Solid Waste' },
-//     { key: 'electricity', label: 'Electricity' },
-//     { key: 'water_supply', label: 'Water Supply' },
-//     { key: 'drainage', label: 'Drainage System' },
-//     { key: 'vimbweta', label: 'Vimbweta' },
-//     { key: 'security', label: 'Security Lights' },
-//     { key: 'recreational_areas', label: 'Recreational Areas' },
-//   ];
-
-//   // Trim trailing slash from env variable, or fallback to relative path
-//   const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-
-//   useEffect(() => {
-//     const params = new URLSearchParams(location.search);
-//     const category = params.get('category');
-//     const type = category ? (categoryToTypeMap[category] || 'buildings') : 'buildings';
-//     setSelectedType(type);
-//   }, [location]);
-
-//   const lastBoundsKeyRef = useRef(null);
-
-//   const fetchGeoByBbox = useCallback(
-//     debounce(async (layer, bounds, simplify = 0.0001) => {
-//       if (!layer) return;
-//       try {
-//         setLoading(true);
-//         setError('');
-//         const token = localStorage.getItem('token');
-//         let url = `${API_BASE}/geojson/${layer}`;
-//         if (!API_BASE) url = `/api/spatial/geojson/${layer}`;
-
-//         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
-
-//         const resp = await axios.get(url, {
-//           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-//           params: { bbox, simplify },
-//           timeout: 30000,
-//         });
-
-//         const fc = resp.data || { type: 'FeatureCollection', features: [] };
-//         setSpatialData(Array.isArray(fc.features) ? fc.features : []);
-//       } catch (err) {
-//         console.error('Error fetching geojson by bbox:', err);
-//         setError('Failed to load features for current view');
-//         setSpatialData([]);
-//       } finally {
-//         setLoading(false);
-//       }
-//     }, 350),
-//     [API_BASE]
-//   );
-
-//   // Initial fetch (simplified whole-layer, optional)
-//   useEffect(() => {
-//     setSpatialData([]);
-//     setError('');
-//     setLoading(true);
-
-//     (async () => {
-//       try {
-//         const token = localStorage.getItem('token');
-//         let url = `${API_BASE}/geojson/${selectedType}`;
-//         if (!API_BASE) url = `/api/spatial/geojson/${selectedType}`;
-
-//         const resp = await axios.get(url, {
-//           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-//           params: { simplify: 0.0005 },
-//           timeout: 30000,
-//         });
-
-//         const fc = resp.data || { type: 'FeatureCollection', features: [] };
-//         setSpatialData(Array.isArray(fc.features) ? fc.features : []);
-//       } catch (err) {
-//         console.warn('Initial whole-layer fetch failed:', err);
-//       } finally {
-//         setLoading(false);
-//       }
-//     })();
-//   }, [selectedType, API_BASE]);
-
-//   const handleBoundsChange = (bounds) => {
-//     if (!bounds) return;
-//     const key = `${bounds.getWest().toFixed(6)},${bounds.getSouth().toFixed(6)},${bounds.getEast().toFixed(6)},${bounds.getNorth().toFixed(6)}`;
-//     if (lastBoundsKeyRef.current === key) return;
-//     lastBoundsKeyRef.current = key;
-//     fetchGeoByBbox(selectedType, bounds, 0.00012);
-//   };
-
-//   return (
-//     <div className="container mx-auto px-4 py-4">
-//       <div className="card">
-//         <h1 className="card-title">Spatial Data Map</h1>
-
-//         {error && <p className="error-message text-red-600">{error}</p>}
-//         {loading && <div className="loading-spinner">Loading...</div>}
-
-//         <div className="map-controls mb-4 flex items-center gap-4">
-//           <select
-//             value={selectedType}
-//             onChange={(e) => setSelectedType(e.target.value)}
-//             className="input-field border p-2 rounded"
-//           >
-//             {dataTypes.map(({ key, label }) => (
-//               <option key={key} value={key}>
-//                 {label}
-//               </option>
-//             ))}
-//           </select>
-//           <div className="text-sm text-gray-600">
-//             Layer: <b>{selectedType}</b>
-//           </div>
-//         </div>
-
-//         <MapComponent
-//           spatialData={spatialData}
-//           initialCenter={[-6.764538, 39.214464]}
-//           onBoundsChange={handleBoundsChange}
-//         />
-//       </div>
-//     </div>
-//   );
-// }
-
-// export default MapView;
-
-//night
+//kumekucha 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -621,9 +454,7 @@ function MapView() {
   const [selectedType, setSelectedType] = useState('buildings');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [availableLayers, setAvailableLayers] = useState([]);
   const location = useLocation();
-  const cacheRef = useRef(new Map()); // Cache for GeoJSON data
 
   const categoryToTypeMap = {
     buildings: 'buildings',
@@ -655,67 +486,26 @@ function MapView() {
     { key: 'recreational_areas', label: 'Recreational Areas' },
   ];
 
-  // Trim trailing slash from env variable, or fallback to /api
-  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') || '/api';
+  // Trim trailing slash from env variable, or fallback to relative path
+  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
-  // Fetch available layers
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const url = `${API_BASE}/spatial/layers`;
-        console.log('Fetching layers from:', url); // Debug log
-        const resp = await axios.get(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          timeout: 10000,
-        });
-        const layers = (resp.data?.layers || []).filter((l) => l.exists).map((l) => l.name);
-        setAvailableLayers(layers);
-        if (!layers.includes(selectedType)) {
-          setSelectedType(layers[0] || 'buildings');
-        }
-      } catch (err) {
-        console.error('Error fetching available layers:', err);
-        setError(`Failed to load available layers: ${err.message}`);
-      }
-    })();
-  }, [API_BASE, selectedType]);
-
-  // Handle URL category parameter
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const category = params.get('category');
     const type = category ? (categoryToTypeMap[category] || 'buildings') : 'buildings';
-    if (availableLayers.length && !availableLayers.includes(type)) {
-      setSelectedType(availableLayers[0] || 'buildings');
-    } else {
-      setSelectedType(type);
-    }
-  }, [location, availableLayers]);
+    setSelectedType(type);
+  }, [location]);
 
   const lastBoundsKeyRef = useRef(null);
 
   const fetchGeoByBbox = useCallback(
     debounce(async (layer, bounds, simplify = 0.0001) => {
-      if (!layer || !availableLayers.includes(layer) || !availableLayers.length) {
-        setError('No available layers to display');
-        setSpatialData([]);
-        setLoading(false);
-        return;
-      }
-
-      const cacheKey = `${layer}:${bounds.getWest().toFixed(6)},${bounds.getSouth().toFixed(6)},${bounds.getEast().toFixed(6)},${bounds.getNorth().toFixed(6)}:${simplify}`;
-      if (cacheRef.current.has(cacheKey)) {
-        setSpatialData(cacheRef.current.get(cacheKey));
-        setLoading(false);
-        return;
-      }
-
+      if (!layer) return;
       try {
         setLoading(true);
         setError('');
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/spatial/geojson/${layer}`;
+        let url = `${API_BASE}/geojson/${layer}`;
         if (!API_BASE) url = `/api/spatial/geojson/${layer}`;
 
         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
@@ -727,44 +517,28 @@ function MapView() {
         });
 
         const fc = resp.data || { type: 'FeatureCollection', features: [] };
-        const features = Array.isArray(fc.features) ? fc.features : [];
-        cacheRef.current.set(cacheKey, features);
-        setSpatialData(features);
+        setSpatialData(Array.isArray(fc.features) ? fc.features : []);
       } catch (err) {
         console.error('Error fetching geojson by bbox:', err);
-        setError(`Failed to load ${layer} data for current view: ${err.message}`);
+        setError('Failed to load features for current view');
         setSpatialData([]);
       } finally {
         setLoading(false);
       }
-    }, 500), // Increased debounce time to 500ms
-    [API_BASE, availableLayers]
+    }, 350),
+    [API_BASE]
   );
 
-  // Initial fetch
+  // Initial fetch (simplified whole-layer, optional)
   useEffect(() => {
-    if (!selectedType || !availableLayers.includes(selectedType) || !availableLayers.length) {
-      setSpatialData([]);
-      setError('Waiting for available layers...');
-      setLoading(false);
-      return;
-    }
-
     setSpatialData([]);
     setError('');
     setLoading(true);
 
     (async () => {
-      const cacheKey = `${selectedType}:initial:0.0005`;
-      if (cacheRef.current.has(cacheKey)) {
-        setSpatialData(cacheRef.current.get(cacheKey));
-        setLoading(false);
-        return;
-      }
-
       try {
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/spatial/geojson/${selectedType}`;
+        let url = `${API_BASE}/geojson/${selectedType}`;
         if (!API_BASE) url = `/api/spatial/geojson/${selectedType}`;
 
         const resp = await axios.get(url, {
@@ -774,17 +548,14 @@ function MapView() {
         });
 
         const fc = resp.data || { type: 'FeatureCollection', features: [] };
-        const features = Array.isArray(fc.features) ? fc.features : [];
-        cacheRef.current.set(cacheKey, features);
-        setSpatialData(features);
+        setSpatialData(Array.isArray(fc.features) ? fc.features : []);
       } catch (err) {
         console.warn('Initial whole-layer fetch failed:', err);
-        setError(`Failed to load initial ${selectedType} data: ${err.message}`);
       } finally {
         setLoading(false);
       }
     })();
-  }, [selectedType, API_BASE, availableLayers]);
+  }, [selectedType, API_BASE]);
 
   const handleBoundsChange = (bounds) => {
     if (!bounds) return;
@@ -801,24 +572,18 @@ function MapView() {
 
         {error && <p className="error-message text-red-600">{error}</p>}
         {loading && <div className="loading-spinner">Loading...</div>}
-        {!loading && availableLayers.length === 0 && (
-          <p className="text-yellow-600">No spatial layers available. Please upload data.</p>
-        )}
 
         <div className="map-controls mb-4 flex items-center gap-4">
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
             className="input-field border p-2 rounded"
-            disabled={availableLayers.length === 0}
           >
-            {dataTypes
-              .filter(({ key }) => availableLayers.includes(key))
-              .map(({ key, label }) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
+            {dataTypes.map(({ key, label }) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
           </select>
           <div className="text-sm text-gray-600">
             Layer: <b>{selectedType}</b>
