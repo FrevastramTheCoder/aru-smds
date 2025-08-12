@@ -196,19 +196,13 @@
 // }
 
 // export default MapComponent;
-// src/components/MapComponent.jsx
+// // src/components/MapComponent.jsx
+
+//kumekucha
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-/**
- * MapComponent (plain Leaflet)
- * Props:
- *   - spatialData: array of GeoJSON Feature objects (FeatureCollection.features)
- *   - initialCenter: [lat, lng]
- *   - initialZoom: number (optional)
- *   - onBoundsChange: function(bounds) called on moveend/zoomend (Leaflet LatLngBounds)
- */
 function MapComponent({
   spatialData = [],
   initialCenter = [-6.764538, 39.214464],
@@ -221,7 +215,6 @@ function MapComponent({
   const moveHandlerRef = useRef(null);
 
   useEffect(() => {
-    // Initialize map once
     if (mapRef.current && !mapInstanceRef.current) {
       mapInstanceRef.current = L.map(mapRef.current, {
         center: initialCenter,
@@ -238,7 +231,6 @@ function MapComponent({
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(mapInstanceRef.current);
 
-      // Add moveend/zoomend handlers to notify parent (debounce there)
       const map = mapInstanceRef.current;
       moveHandlerRef.current = () => {
         try {
@@ -251,7 +243,6 @@ function MapComponent({
       map.on('moveend', moveHandlerRef.current);
       map.on('zoomend', moveHandlerRef.current);
 
-      // trigger initial bounds once map is ready
       setTimeout(() => {
         try {
           const bounds = map.getBounds();
@@ -262,25 +253,20 @@ function MapComponent({
 
     const map = mapInstanceRef.current;
 
-    // Remove previous geojson layer to avoid duplicates
     if (geoJsonLayerRef.current) {
       geoJsonLayerRef.current.remove();
       geoJsonLayerRef.current = null;
     }
 
-    // If no features, optionally reset to center
     if (!map || !Array.isArray(spatialData) || spatialData.length === 0) {
       if (map) map.setView(initialCenter, initialZoom);
       return;
     }
 
-    // Convert incoming spatialData items to valid GeoJSON features (defensive)
     const features = spatialData
       .filter((f) => f && (f.type === 'Feature' || (f.geometry && f.properties !== undefined)))
       .map((f) => {
-        // If the item is already a Feature, use it
         if (f.type === 'Feature' && f.geometry) return f;
-        // else assume object with geometry & attributes
         return {
           type: 'Feature',
           properties: f.properties || f.attributes || {},
@@ -288,7 +274,6 @@ function MapComponent({
         };
       });
 
-    // Create geojson layer
     try {
       geoJsonLayerRef.current = L.geoJSON(features, {
         onEachFeature: (feature, layer) => {
@@ -303,7 +288,6 @@ function MapComponent({
         },
       }).addTo(map);
 
-      // Fit to bounds if valid
       const bounds = geoJsonLayerRef.current.getBounds();
       if (bounds && bounds.isValid && bounds.isValid()) {
         map.fitBounds(bounds, { maxZoom: 18, padding: [20, 20] });
@@ -312,13 +296,11 @@ function MapComponent({
       console.error('Error adding GeoJSON to map:', err);
     }
 
-    // cleanup on unmount of this effect (layer removed above at start)
     return () => {
-      // don't remove map instance here (we want single map instance across re-renders)
+      // Do not remove map instance on re-render
     };
   }, [spatialData, initialCenter, initialZoom, onBoundsChange]);
 
-  // Remove map on component unmount
   useEffect(() => {
     return () => {
       if (mapInstanceRef.current) {

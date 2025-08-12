@@ -433,15 +433,14 @@
 // }
 
 // export default MapView;
-// src/routes/MapView.jsx
+// // src/routes/MapView.jsx
+
+//kumekucha 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import MapComponent from '../components/MapComponent';
 
-/**
- * Debounce helper
- */
 function debounce(fn, wait) {
   let t;
   return (...args) => {
@@ -451,13 +450,12 @@ function debounce(fn, wait) {
 }
 
 function MapView() {
-  const [spatialData, setSpatialData] = useState([]); // array of GeoJSON Feature objects
+  const [spatialData, setSpatialData] = useState([]);
   const [selectedType, setSelectedType] = useState('buildings');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const location = useLocation();
 
-  // Map of possible category query params -> backend table names
   const categoryToTypeMap = {
     buildings: 'buildings',
     roads: 'roads',
@@ -488,10 +486,9 @@ function MapView() {
     { key: 'recreational_areas', label: 'Recreational Areas' },
   ];
 
-  // base API for spatial endpoints. Set VITE_API_URL in your .env (e.g. https://smds.onrender.com/api/spatial)
+  // Trim trailing slash from env variable, or fallback to relative path
   const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
-  // if URL contains ?category=some-key, set appropriate selectedType
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const category = params.get('category');
@@ -499,10 +496,8 @@ function MapView() {
     setSelectedType(type);
   }, [location]);
 
-  // last known bounds key to avoid duplicate fetches
   const lastBoundsKeyRef = useRef(null);
 
-  // Debounced fetch (to be called on map moveend)
   const fetchGeoByBbox = useCallback(
     debounce(async (layer, bounds, simplify = 0.0001) => {
       if (!layer) return;
@@ -511,7 +506,7 @@ function MapView() {
         setError('');
         const token = localStorage.getItem('token');
         let url = `${API_BASE}/geojson/${layer}`;
-        if (!API_BASE) url = `/api/spatial/geojson/${layer}`; // fallback to relative
+        if (!API_BASE) url = `/api/spatial/geojson/${layer}`;
 
         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
 
@@ -521,7 +516,6 @@ function MapView() {
           timeout: 30000,
         });
 
-        // resp.data is a FeatureCollection
         const fc = resp.data || { type: 'FeatureCollection', features: [] };
         setSpatialData(Array.isArray(fc.features) ? fc.features : []);
       } catch (err) {
@@ -535,43 +529,40 @@ function MapView() {
     [API_BASE]
   );
 
-  // initial fetch for the selected type without bbox (optional). We'll wait a small tick so Map can ask for bounds first.
+  // Initial fetch (simplified whole-layer, optional)
   useEffect(() => {
-    // Clear previous features immediately when switching layer
     setSpatialData([]);
     setError('');
     setLoading(true);
 
-    // try to fetch a small simplified whole-layer as fallback (but not ideal for big tables)
     (async () => {
       try {
         const token = localStorage.getItem('token');
         let url = `${API_BASE}/geojson/${selectedType}`;
         if (!API_BASE) url = `/api/spatial/geojson/${selectedType}`;
-        // small simplification so initial load is light
+
         const resp = await axios.get(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           params: { simplify: 0.0005 },
           timeout: 30000,
         });
+
         const fc = resp.data || { type: 'FeatureCollection', features: [] };
         setSpatialData(Array.isArray(fc.features) ? fc.features : []);
       } catch (err) {
-        console.warn('Initial whole-layer fetch failed (this is okay if you rely on bbox fetch):', err);
-        // don't set a hard error here; map bbox fetch will try later
+        console.warn('Initial whole-layer fetch failed:', err);
       } finally {
         setLoading(false);
       }
     })();
   }, [selectedType, API_BASE]);
 
-  // called by MapComponent when map has moved / zoomed
   const handleBoundsChange = (bounds) => {
     if (!bounds) return;
     const key = `${bounds.getWest().toFixed(6)},${bounds.getSouth().toFixed(6)},${bounds.getEast().toFixed(6)},${bounds.getNorth().toFixed(6)}`;
-    if (lastBoundsKeyRef.current === key) return; // avoid duplicate
+    if (lastBoundsKeyRef.current === key) return;
     lastBoundsKeyRef.current = key;
-    fetchGeoByBbox(selectedType, bounds, 0.00012); // adjust simplify tolerance as needed
+    fetchGeoByBbox(selectedType, bounds, 0.00012);
   };
 
   return (
@@ -594,10 +585,11 @@ function MapView() {
               </option>
             ))}
           </select>
-          <div className="text-sm text-gray-600">Layer: <b>{selectedType}</b></div>
+          <div className="text-sm text-gray-600">
+            Layer: <b>{selectedType}</b>
+          </div>
         </div>
 
-        {/* MapComponent expects spatialData as array of GeoJSON Feature objects */}
         <MapComponent
           spatialData={spatialData}
           initialCenter={[-6.764538, 39.214464]}
