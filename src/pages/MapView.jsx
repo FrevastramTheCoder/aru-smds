@@ -602,7 +602,7 @@
 
 // export default MapView;
 
-//NIGHT
+//night
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -655,30 +655,28 @@ function MapView() {
     { key: 'recreational_areas', label: 'Recreational Areas' },
   ];
 
-  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  // Trim trailing slash from env variable, or fallback to /api
+  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') || '/api';
 
   // Fetch available layers
   useEffect(() => {
     (async () => {
       try {
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/layers`;
-        if (!API_BASE) url = '/api/spatial/layers';
-
+        const url = `${API_BASE}/spatial/layers`;
+        console.log('Fetching layers from:', url); // Debug log
         const resp = await axios.get(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           timeout: 10000,
         });
-
         const layers = (resp.data?.layers || []).filter((l) => l.exists).map((l) => l.name);
         setAvailableLayers(layers);
-        // Set default layer if current selection is unavailable
         if (!layers.includes(selectedType)) {
           setSelectedType(layers[0] || 'buildings');
         }
       } catch (err) {
         console.error('Error fetching available layers:', err);
-        setError('Failed to load available layers');
+        setError(`Failed to load available layers: ${err.message}`);
       }
     })();
   }, [API_BASE, selectedType]);
@@ -699,7 +697,12 @@ function MapView() {
 
   const fetchGeoByBbox = useCallback(
     debounce(async (layer, bounds, simplify = 0.0001) => {
-      if (!layer || !availableLayers.includes(layer)) return;
+      if (!layer || !availableLayers.includes(layer) || !availableLayers.length) {
+        setError('No available layers to display');
+        setSpatialData([]);
+        setLoading(false);
+        return;
+      }
 
       const cacheKey = `${layer}:${bounds.getWest().toFixed(6)},${bounds.getSouth().toFixed(6)},${bounds.getEast().toFixed(6)},${bounds.getNorth().toFixed(6)}:${simplify}`;
       if (cacheRef.current.has(cacheKey)) {
@@ -712,7 +715,7 @@ function MapView() {
         setLoading(true);
         setError('');
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/geojson/${layer}`;
+        let url = `${API_BASE}/spatial/geojson/${layer}`;
         if (!API_BASE) url = `/api/spatial/geojson/${layer}`;
 
         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
@@ -729,18 +732,23 @@ function MapView() {
         setSpatialData(features);
       } catch (err) {
         console.error('Error fetching geojson by bbox:', err);
-        setError(`Failed to load ${layer} data for current view`);
+        setError(`Failed to load ${layer} data for current view: ${err.message}`);
         setSpatialData([]);
       } finally {
         setLoading(false);
       }
-    }, 350),
+    }, 500), // Increased debounce time to 500ms
     [API_BASE, availableLayers]
   );
 
   // Initial fetch
   useEffect(() => {
-    if (!selectedType || !availableLayers.includes(selectedType)) return;
+    if (!selectedType || !availableLayers.includes(selectedType) || !availableLayers.length) {
+      setSpatialData([]);
+      setError('Waiting for available layers...');
+      setLoading(false);
+      return;
+    }
 
     setSpatialData([]);
     setError('');
@@ -756,7 +764,7 @@ function MapView() {
 
       try {
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/geojson/${selectedType}`;
+        let url = `${API_BASE}/spatial/geojson/${selectedType}`;
         if (!API_BASE) url = `/api/spatial/geojson/${selectedType}`;
 
         const resp = await axios.get(url, {
@@ -771,7 +779,7 @@ function MapView() {
         setSpatialData(features);
       } catch (err) {
         console.warn('Initial whole-layer fetch failed:', err);
-        setError(`Failed to load initial ${selectedType} data`);
+        setError(`Failed to load initial ${selectedType} data: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -793,6 +801,9 @@ function MapView() {
 
         {error && <p className="error-message text-red-600">{error}</p>}
         {loading && <div className="loading-spinner">Loading...</div>}
+        {!loading && availableLayers.length === 0 && (
+          <p className="text-yellow-600">No spatial layers available. Please upload data.</p>
+        )}
 
         <div className="map-controls mb-4 flex items-center gap-4">
           <select

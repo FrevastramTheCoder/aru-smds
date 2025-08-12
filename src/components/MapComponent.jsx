@@ -326,7 +326,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 function MapComponent({
-  spatialData = [], // Expect array of GeoJSON Features
+  spatialData = [],
   initialCenter = [-6.764538, 39.214464],
   initialZoom = 13,
   onBoundsChange = () => {},
@@ -386,7 +386,6 @@ function MapComponent({
       return;
     }
 
-    // Filter valid GeoJSON features
     const validFeatures = spatialData.filter(
       (f) => f?.type === 'Feature' && f.geometry && f.properties !== undefined
     );
@@ -413,14 +412,11 @@ function MapComponent({
             fillColor: '#3388ff',
           });
         },
-        style: (feature) => {
-          // Optional: Customize style based on geometry type or properties
-          return {
-            color: '#3388ff',
-            weight: 2,
-            fillOpacity: 0.5,
-          };
-        },
+        style: (feature) => ({
+          color: '#3388ff',
+          weight: 2,
+          fillOpacity: 0.5,
+        }),
       }).addTo(map);
 
       const bounds = geoJsonLayerRef.current.getBounds();
@@ -433,10 +429,6 @@ function MapComponent({
       console.error('Error adding GeoJSON to map:', err);
       map.setView(initialCenter, initialZoom);
     }
-
-    return () => {
-      // Cleanup handled in separate useEffect
-    };
   }, [spatialData, initialCenter, initialZoom, onBoundsChange]);
 
   useEffect(() => {
