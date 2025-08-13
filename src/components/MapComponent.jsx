@@ -198,10 +198,144 @@
 // export default MapComponent;
 // // src/components/MapComponent.jsx
 
-//kumekucha
+// //kumekucha
+// import React, { useEffect, useRef } from 'react';
+// import L from 'leaflet';
+// import 'leaflet/dist/leaflet.css';
+
+// function MapComponent({
+//   spatialData = [],
+//   initialCenter = [-6.764538, 39.214464],
+//   initialZoom = 13,
+//   onBoundsChange = () => {},
+// }) {
+//   const mapRef = useRef(null);
+//   const mapInstanceRef = useRef(null);
+//   const geoJsonLayerRef = useRef(null);
+//   const moveHandlerRef = useRef(null);
+
+//   useEffect(() => {
+//     if (mapRef.current && !mapInstanceRef.current) {
+//       mapInstanceRef.current = L.map(mapRef.current, {
+//         center: initialCenter,
+//         zoom: initialZoom,
+//         maxBounds: [
+//           [-90, -180],
+//           [90, 180],
+//         ],
+//         maxBoundsViscosity: 1.0,
+//       });
+
+//       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+//         attribution:
+//           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+//       }).addTo(mapInstanceRef.current);
+
+//       const map = mapInstanceRef.current;
+//       moveHandlerRef.current = () => {
+//         try {
+//           const bounds = map.getBounds();
+//           onBoundsChange(bounds);
+//         } catch (err) {
+//           console.warn('Bounds callback error', err);
+//         }
+//       };
+//       map.on('moveend', moveHandlerRef.current);
+//       map.on('zoomend', moveHandlerRef.current);
+
+//       setTimeout(() => {
+//         try {
+//           const bounds = map.getBounds();
+//           onBoundsChange(bounds);
+//         } catch (e) {}
+//       }, 300);
+//     }
+
+//     const map = mapInstanceRef.current;
+
+//     if (geoJsonLayerRef.current) {
+//       geoJsonLayerRef.current.remove();
+//       geoJsonLayerRef.current = null;
+//     }
+
+//     if (!map || !Array.isArray(spatialData) || spatialData.length === 0) {
+//       if (map) map.setView(initialCenter, initialZoom);
+//       return;
+//     }
+
+//     const features = spatialData
+//       .filter((f) => f && (f.type === 'Feature' || (f.geometry && f.properties !== undefined)))
+//       .map((f) => {
+//         if (f.type === 'Feature' && f.geometry) return f;
+//         return {
+//           type: 'Feature',
+//           properties: f.properties || f.attributes || {},
+//           geometry: f.geometry || null,
+//         };
+//       });
+
+//     try {
+//       geoJsonLayerRef.current = L.geoJSON(features, {
+//         onEachFeature: (feature, layer) => {
+//           const props = feature.properties || {};
+//           const popupContent = Object.entries(props)
+//             .map(([k, v]) => `<b>${k}</b>: ${v}`)
+//             .join('<br>');
+//           if (popupContent) layer.bindPopup(popupContent);
+//         },
+//         pointToLayer: (feature, latlng) => {
+//           return L.circleMarker(latlng, { radius: 6, fillOpacity: 0.9 });
+//         },
+//       }).addTo(map);
+
+//       const bounds = geoJsonLayerRef.current.getBounds();
+//       if (bounds && bounds.isValid && bounds.isValid()) {
+//         map.fitBounds(bounds, { maxZoom: 18, padding: [20, 20] });
+//       }
+//     } catch (err) {
+//       console.error('Error adding GeoJSON to map:', err);
+//     }
+
+//     return () => {
+//       // Do not remove map instance on re-render
+//     };
+//   }, [spatialData, initialCenter, initialZoom, onBoundsChange]);
+
+//   useEffect(() => {
+//     return () => {
+//       if (mapInstanceRef.current) {
+//         const m = mapInstanceRef.current;
+//         if (moveHandlerRef.current) {
+//           m.off('moveend', moveHandlerRef.current);
+//           m.off('zoomend', moveHandlerRef.current);
+//         }
+//         m.remove();
+//         mapInstanceRef.current = null;
+//       }
+//     };
+//   }, []);
+
+//   return <div ref={mapRef} style={{ height: '500px', width: '100%' }} />;
+// }
+
+// export default MapComponent;
+//before site 
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// Fix for default marker icons in Leaflet
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+const DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
 
 function MapComponent({
   spatialData = [],
@@ -214,9 +348,10 @@ function MapComponent({
   const geoJsonLayerRef = useRef(null);
   const moveHandlerRef = useRef(null);
 
+  // Initialize map
   useEffect(() => {
     if (mapRef.current && !mapInstanceRef.current) {
-      mapInstanceRef.current = L.map(mapRef.current, {
+      const map = L.map(mapRef.current, {
         center: initialCenter,
         zoom: initialZoom,
         maxBounds: [
@@ -226,13 +361,17 @@ function MapComponent({
         maxBoundsViscosity: 1.0,
       });
 
+      // Add base tile layer
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(mapInstanceRef.current);
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(map);
 
-      const map = mapInstanceRef.current;
-      moveHandlerRef.current = () => {
+      // Set default icon
+      L.Marker.prototype.options.icon = DefaultIcon;
+
+      // Set up bounds change handler
+      const handler = () => {
         try {
           const bounds = map.getBounds();
           onBoundsChange(bounds);
@@ -240,82 +379,113 @@ function MapComponent({
           console.warn('Bounds callback error', err);
         }
       };
-      map.on('moveend', moveHandlerRef.current);
-      map.on('zoomend', moveHandlerRef.current);
+      moveHandlerRef.current = handler;
+      map.on('moveend', handler);
+      map.on('zoomend', handler);
 
-      setTimeout(() => {
-        try {
-          const bounds = map.getBounds();
-          onBoundsChange(bounds);
-        } catch (e) {}
-      }, 300);
+      // Initial bounds callback
+      setTimeout(() => handler(), 300);
+
+      mapInstanceRef.current = map;
     }
 
-    const map = mapInstanceRef.current;
+    return () => {
+      if (mapInstanceRef.current) {
+        const map = mapInstanceRef.current;
+        if (moveHandlerRef.current) {
+          map.off('moveend', moveHandlerRef.current);
+          map.off('zoomend', moveHandlerRef.current);
+        }
+        map.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [initialCenter, initialZoom, onBoundsChange]);
 
+  // Update GeoJSON layer when data changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Remove previous layer
     if (geoJsonLayerRef.current) {
       geoJsonLayerRef.current.remove();
       geoJsonLayerRef.current = null;
     }
 
-    if (!map || !Array.isArray(spatialData) || spatialData.length === 0) {
-      if (map) map.setView(initialCenter, initialZoom);
+    // Don't proceed if no data
+    if (!Array.isArray(spatialData) || spatialData.length === 0) {
       return;
     }
 
-    const features = spatialData
-      .filter((f) => f && (f.type === 'Feature' || (f.geometry && f.properties !== undefined)))
-      .map((f) => {
-        if (f.type === 'Feature' && f.geometry) return f;
-        return {
-          type: 'Feature',
-          properties: f.properties || f.attributes || {},
-          geometry: f.geometry || null,
-        };
-      });
-
     try {
+      // Create feature collection
+      const features = {
+        type: 'FeatureCollection',
+        features: spatialData.map(f => ({
+          type: 'Feature',
+          properties: f.properties || {},
+          geometry: f.geometry || null,
+        })).filter(f => f.geometry)
+      };
+
+      // Create GeoJSON layer with custom styling
       geoJsonLayerRef.current = L.geoJSON(features, {
-        onEachFeature: (feature, layer) => {
-          const props = feature.properties || {};
-          const popupContent = Object.entries(props)
-            .map(([k, v]) => `<b>${k}</b>: ${v}`)
-            .join('<br>');
-          if (popupContent) layer.bindPopup(popupContent);
-        },
         pointToLayer: (feature, latlng) => {
-          return L.circleMarker(latlng, { radius: 6, fillOpacity: 0.9 });
+          return L.circleMarker(latlng, {
+            radius: 5,
+            fillColor: '#3388ff',
+            color: '#000',
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+          });
         },
+        style: () => ({
+          color: '#3388ff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.7
+        }),
+        onEachFeature: (feature, layer) => {
+          if (feature.properties) {
+            const popupContent = Object.entries(feature.properties)
+              .map(([key, value]) => `<b>${key}:</b> ${value}`)
+              .join('<br>');
+            if (popupContent) {
+              layer.bindPopup(popupContent);
+            }
+          }
+        }
       }).addTo(map);
 
-      const bounds = geoJsonLayerRef.current.getBounds();
-      if (bounds && bounds.isValid && bounds.isValid()) {
-        map.fitBounds(bounds, { maxZoom: 18, padding: [20, 20] });
+      // Fit bounds if data exists
+      if (features.features.length > 0) {
+        const bounds = geoJsonLayerRef.current.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { 
+            padding: [50, 50], 
+            maxZoom: 18,
+            duration: 1
+          });
+        }
       }
     } catch (err) {
-      console.error('Error adding GeoJSON to map:', err);
+      console.error('Error rendering GeoJSON:', err);
     }
+  }, [spatialData]);
 
-    return () => {
-      // Do not remove map instance on re-render
-    };
-  }, [spatialData, initialCenter, initialZoom, onBoundsChange]);
-
-  useEffect(() => {
-    return () => {
-      if (mapInstanceRef.current) {
-        const m = mapInstanceRef.current;
-        if (moveHandlerRef.current) {
-          m.off('moveend', moveHandlerRef.current);
-          m.off('zoomend', moveHandlerRef.current);
-        }
-        m.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []);
-
-  return <div ref={mapRef} style={{ height: '500px', width: '100%' }} />;
+  return (
+    <div 
+      ref={mapRef} 
+      style={{ 
+        height: '600px', 
+        width: '100%',
+        minHeight: '400px',
+        borderRadius: '8px'
+      }} 
+    />
+  );
 }
 
 export default MapComponent;
