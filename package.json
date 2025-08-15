@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-oauth/google": "^0.12.2",
     "axios": "^1.11.0",
+    "file-saver": "^2.0.5",
     "framer-motion": "^12.23.12",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.536.0",
@@ -21,6 +22,7 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.7.1",
     "shpjs": "^6.1.0",
+    "tokml": "^0.4.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
