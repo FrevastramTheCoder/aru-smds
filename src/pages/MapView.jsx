@@ -1319,7 +1319,6 @@
 
 // export default MapView;
 
-// src/pages/MapView.jsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -1346,12 +1345,10 @@ function MapView() {
 
   const location = useLocation();
   const googleEarthRef = useRef(null);
-  const googleMapInstance = useRef(null);
-  const googleDataLayer = useRef(null);
 
   // Vite environment variables
   const API_BASE = (import.meta.env.VITE_API_URL || 'https://smds.onrender.com').replace(/\/$/, '');
-  const API_PREFIX = `${API_BASE}/geojson`; // assumes backend endpoint: /geojson/:layer
+  const API_PREFIX = `${API_BASE}/geojson`; 
   const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
   const dataTypes = [
@@ -1392,9 +1389,13 @@ function MapView() {
     }
   }, [location, availableLayers]);
 
-  // Fetch GeoJSON data
-  const fetchGeoData = useCallback(async (layer, bounds = null) => {
+  // --- Fetch GeoJSON with retry/backoff for 429 ---
+  const fetchGeoData = useCallback(async (layer, bounds = null, attempt = 0) => {
     if (!layer) return [];
+
+    const MAX_RETRIES = 5;
+    const BASE_DELAY = 500; // ms
+
     try {
       setLoading(true);
       setError('');
@@ -1412,7 +1413,15 @@ function MapView() {
 
       const response = await axios.get(url, { params, timeout: 30000 });
       return response.status === 200 ? response.data?.features || [] : [];
+
     } catch (error) {
+      if (error.response?.status === 429 && attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, attempt);
+        console.warn(`429 received. Retrying in ${delay}ms (attempt ${attempt + 1})`);
+        await new Promise(res => setTimeout(res, delay));
+        return fetchGeoData(layer, bounds, attempt + 1);
+      }
+
       console.error('Failed to fetch GeoJSON:', error);
       setError(error.message || 'Failed to load spatial data');
       return [];
@@ -1450,48 +1459,6 @@ function MapView() {
   }, [selectedType, fetchGeoByBbox]);
 
   const availableDataTypes = dataTypes.filter(type => availableLayers.some(layer => layer.name === type.key && layer.exists));
-
-  // Google Earth 3D integration
-  useEffect(() => {
-    if (!showGoogleEarth || !googleEarthRef.current || !GOOGLE_API_KEY) return;
-
-    googleEarthRef.current.innerHTML = '';
-
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&v=weekly`;
-    script.async = true;
-    script.onload = () => {
-      googleMapInstance.current = new window.google.maps.Map(googleEarthRef.current, {
-        center: { lat: -6.764538, lng: 39.214464 },
-        zoom: 13,
-        mapTypeId: 'satellite',
-        tilt: 45
-      });
-
-      googleDataLayer.current = new window.google.maps.Data();
-      googleDataLayer.current.setStyle({
-        fillColor: 'rgba(0, 123, 255, 0.3)',
-        strokeColor: '#007bff',
-        strokeWeight: 2
-      });
-      googleDataLayer.current.setMap(googleMapInstance.current);
-
-      if (spatialData.length) {
-        googleDataLayer.current.addGeoJson({ type: 'FeatureCollection', features: spatialData });
-      }
-    };
-
-    document.body.appendChild(script);
-  }, [showGoogleEarth, GOOGLE_API_KEY, spatialData]);
-
-  // Update Google Earth data layer
-  useEffect(() => {
-    if (!showGoogleEarth || !googleDataLayer.current) return;
-    googleDataLayer.current.forEach(f => googleDataLayer.current.remove(f));
-    if (spatialData.length) {
-      googleDataLayer.current.addGeoJson({ type: 'FeatureCollection', features: spatialData });
-    }
-  }, [spatialData, showGoogleEarth]);
 
   // Export GeoJSON/KML
   const handleExport = (format) => {
@@ -1558,16 +1525,14 @@ function MapView() {
         </div>
 
         <div className="border border-gray-200 rounded-lg overflow-hidden shadow-lg" style={{ height: '600px' }}>
-          {showGoogleEarth ? (
-            <div ref={googleEarthRef} style={{ width: '100%', height: '100%' }} />
-          ) : (
-            <MapComponent
-              spatialData={spatialData}
-              initialCenter={[-6.764538, 39.214464]}
-              initialZoom={13}
-              onBoundsChange={handleBoundsChange}
-            />
-          )}
+          <MapComponent
+            spatialData={spatialData}
+            initialCenter={[-6.764538, 39.214464]}
+            initialZoom={13}
+            onBoundsChange={handleBoundsChange}
+            showGoogleEarth={showGoogleEarth}
+            googleApiKey={GOOGLE_API_KEY}
+          />
         </div>
       </div>
     </div>
