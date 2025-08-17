@@ -1,16 +1,20 @@
-
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider } from './context/AuthContext';
+
 import Navbar from './components/Navbar.jsx';
+import PrivateRoute from './components/PrivateRoute';
+
+// Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import SystemDashboard from './pages/SystemDashboard';
 import AdminPanel from './pages/AdminPanel';
 import MapView from './pages/MapView';
 import DataManagement from './pages/DatamanagementPage.jsx';
-import PrivateRoute from './components/PrivateRoute';
+import DataView from './pages/DataView.jsx'; // <-- New Data View Page
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -29,20 +33,22 @@ function App() {
           <div className="min-h-screen">
             <Navbar />
             <Routes>
+              {/* Public Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              {/* Add the Google callback route */}
               <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
-              
+
+              {/* Private Routes */}
               <Route element={<PrivateRoute />}>
                 <Route path="/" element={<SystemDashboard />} />
                 <Route path="/dashboard" element={<SystemDashboard />} />
                 <Route path="/admin" element={<AdminPanel />} />
                 <Route path="/map" element={<MapView />} />
                 <Route path="/data" element={<DataManagement />} />
+                <Route path="/data-view" element={<DataView />} /> {/* New Data View Page */}
               </Route>
             </Routes>
           </div>
