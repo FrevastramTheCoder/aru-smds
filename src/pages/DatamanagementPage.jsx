@@ -2766,64 +2766,65 @@
 // }
 
 // export default DataManagement;
-
-// src/pages/DatamanagementPage.jsx
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
+// src/pages/DataManagementPage.jsx
+import React, { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import { useAuth } from "../context/AuthContext";
 
 function DataManagement() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [dataType, setDataType] = useState('buildings');
+  const [dataType, setDataType] = useState("buildings");
   const [file, setFile] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+  const [progressColor, setProgressColor] = useState("#3b82f6"); // default blue
 
   const dataTypes = [
-    { key: 'buildings', label: 'Buildings' },
-    { key: 'roads', label: 'Roads' },
-    { key: 'footpaths', label: 'Footpaths' },
-    { key: 'vegetation', label: 'Vegetation' },
-    { key: 'parking', label: 'Parking' },
-    { key: 'solid_waste', label: 'Solid Waste' },
-    { key: 'electricity', label: 'Electricity' },
-    { key: 'water_supply', label: 'Water Supply' },
-    { key: 'drainage', label: 'Drainage System' },
-    { key: 'vimbweta', label: 'Vimbweta' },
-    { key: 'security', label: 'Security Lights' },
-    { key: 'recreational_areas', label: 'Recreational Areas' },
+    { key: "buildings", label: "Buildings" },
+    { key: "roads", label: "Roads" },
+    { key: "footpaths", label: "Footpaths" },
+    { key: "vegetation", label: "Vegetation" },
+    { key: "parking", label: "Parking" },
+    { key: "solid_waste", label: "Solid Waste" },
+    { key: "electricity", label: "Electricity" },
+    { key: "water_supply", label: "Water Supply" },
+    { key: "drainage", label: "Drainage System" },
+    { key: "vimbweta", label: "Vimbweta" },
+    { key: "security", label: "Security Lights" },
+    { key: "recreational_areas", label: "Recreational Areas" },
   ];
 
   const API_BASE =
-    import.meta.env.VITE_API_SPATIAL_URL || 'http://localhost:5000/api/spatial';
+    import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Upload Shapefile
+  // Handle shapefile upload
   const handleFileUpload = useCallback(async () => {
     if (!file) {
-      setError('Please select a file to upload.');
+      setError("Please select a file to upload.");
       return;
     }
 
     setUploadLoading(true);
-    setError('');
+    setError("");
     setUploadProgress(0);
+    setProgressColor("#3b82f6"); // reset to blue when starting
 
     try {
       const formData = new FormData();
-      formData.append('shapefile', file);
-      formData.append('tableName', dataType);
+      formData.append("shapefile", file);
+      formData.append("tableName", dataType);
 
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('No authentication token found');
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("No authentication token found");
 
       await axios.post(`${API_BASE}/upload`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round(
@@ -2833,68 +2834,60 @@ function DataManagement() {
         },
       });
 
+      setProgressColor("#22c55e"); // green when done
       setFile(null);
-      alert('Shapefile uploaded successfully!');
+      alert("✅ Shapefile uploaded successfully!");
     } catch (err) {
+      setProgressColor("#dc2626"); // red on error
       if (err.response?.status === 404) {
-        setError('Upload endpoint not found. Please check server configuration.');
+        setError("Upload endpoint not found. Please check server config.");
       } else if (err.response?.status === 401) {
-        setError('Unauthorized: Please log in again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userId');
+        setError("Unauthorized: Please log in again.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("userId");
       } else {
-        setError(err.response?.data?.error || 'Failed to upload shapefile.');
+        setError(err.response?.data?.error || "Failed to upload shapefile.");
       }
     } finally {
       setUploadLoading(false);
-      setUploadProgress(0);
     }
   }, [file, dataType, API_BASE]);
 
   if (authLoading) return <div className="p-4">Loading authentication...</div>;
   if (!isAuthenticated)
-    return <div className="p-4 text-red-500">Please log in to upload shapefiles.</div>;
+    return (
+      <div className="p-4 text-red-500 font-semibold">
+        Please log in to upload shapefiles.
+      </div>
+    );
 
   return (
-    <div className="container mx-auto px-4 py-4 max-w-lg">
-      {/* Top Buttons */}
-      <div className="flex justify-between mb-6 space-x-2">
-        <button
-          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-          onClick={() => navigate('/data')}
-        >
+    <div className="page-container">
+      {/* Top Navigation Buttons */}
+      <div className="nav-buttons">
+        <button className="btn btn-green" onClick={() => navigate("/data")}>
           Data View
         </button>
-        <button
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          onClick={() => navigate('/map')}
-        >
+        <button className="btn btn-blue" onClick={() => navigate("/map")}>
           Map View
         </button>
-        <button
-          className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
-          onClick={() => navigate('/upload')}
-          disabled
-        >
+        <button className="btn btn-purple" disabled>
           Upload Shapefile
         </button>
       </div>
 
       {/* Upload Card */}
-      <div className="card p-4 border rounded shadow">
-        <h1 className="text-xl font-semibold mb-4">Upload Shapefile</h1>
+      <div className="card">
+        <h1 className="title">📂 Upload Shapefile</h1>
 
-        {error && <p className="text-red-500 mb-2">{error}</p>}
+        {error && <p className="error-text">{error}</p>}
 
-        <div className="mb-4">
-          <label htmlFor="dataType" className="block mb-1 font-medium">
-            Select Data Type
-          </label>
+        <div className="form-group">
+          <label htmlFor="dataType">Select Data Type</label>
           <select
             id="dataType"
             value={dataType}
             onChange={(e) => setDataType(e.target.value)}
-            className="w-full border p-2 rounded"
           >
             {dataTypes.map(({ key, label }) => (
               <option key={key} value={key}>
@@ -2904,26 +2897,38 @@ function DataManagement() {
           </select>
         </div>
 
-        <div className="mb-4">
-          <label htmlFor="fileUpload" className="block mb-1 font-medium">
-            Select Shapefile (.zip)
-          </label>
+        <div className="form-group">
+          <label htmlFor="fileUpload">Select Shapefile (.zip)</label>
           <input
             type="file"
             id="fileUpload"
             accept=".zip"
             onChange={(e) => setFile(e.target.files[0])}
-            className="w-full border p-2 rounded"
           />
         </div>
 
         <button
           onClick={handleFileUpload}
           disabled={uploadLoading || !file}
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+          className="btn btn-blue full-width"
         >
-          {uploadLoading ? `Uploading... ${uploadProgress}%` : 'Upload'}
+          {uploadLoading
+            ? `Uploading... ${uploadProgress}%`
+            : "Upload"}
         </button>
+
+        {/* Progress Bar */}
+        {uploadLoading || uploadProgress > 0 ? (
+          <div className="progress-bar-container">
+            <div
+              className="progress-bar"
+              style={{
+                width: `${uploadProgress}%`,
+                background: progressColor,
+              }}
+            ></div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
