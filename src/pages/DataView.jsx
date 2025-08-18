@@ -40,36 +40,25 @@ function DataView() {
   const [loading, setLoading] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [limit, setLimit] = useState(20);
-
   const mapRef = useRef(null);
 
   const layerName = "security"; // Change this to any spatial layer you want
-  const token = localStorage.getItem("token"); // JWT token stored in localStorage
 
-  const fetchData = async (pageNumber = 1) => {
+  // Corrected fetchData using /geojson endpoint
+  const fetchData = async () => {
     setLoading(true);
     try {
       const res = await axios.get(
-        `https://smds.onrender.com/api/v1/auth/data/${layerName}?page=${pageNumber}&limit=${limit}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        `https://smds.onrender.com/api/v1/auth/geojson/${layerName}?simplify=0.0005`
       );
-      if (res.data) {
-        const rows = res.data.data.map((r) => ({
-          id: r.id,
-          attributes: r.attributes,
-          geometry: r.geometry,
+      if (res.data && res.data.features) {
+        const rows = res.data.features.map((f, i) => ({
+          id: i + 1,
+          attributes: f.properties,
+          geometry: f.geometry,
         }));
         setData(rows);
         setFilteredData(rows);
-        setPage(res.data.page);
-        setTotalPages(res.data.totalPages);
       }
     } catch (err) {
       console.error(err);
@@ -156,11 +145,6 @@ function DataView() {
     toast.info(`Filtered ${result.length} features inside drawn shape`);
   };
 
-  const totalPoints = filteredData.filter((f) => f.geometry?.type === "Point").length;
-  const totalPolygons = filteredData.filter((f) => f.geometry?.type === "Polygon").length;
-  const totalLines = filteredData.filter((f) => f.geometry?.type === "LineString").length;
-  const totalFeatures = filteredData.length;
-
   return (
     <div className="container mx-auto my-8 px-4">
       <ToastContainer />
@@ -234,27 +218,6 @@ function DataView() {
             ))}
           </tbody>
         </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex justify-between mt-4">
-        <button
-          onClick={() => fetchData(Math.max(page - 1, 1))}
-          disabled={page === 1}
-          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
-        >
-          Previous
-        </button>
-        <span>
-          Page {page} of {totalPages}
-        </span>
-        <button
-          onClick={() => fetchData(Math.min(page + 1, totalPages))}
-          disabled={page === totalPages}
-          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
-        >
-          Next
-        </button>
       </div>
 
       {/* Map Modal */}
