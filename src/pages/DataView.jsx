@@ -18,7 +18,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import { FaMapMarkerAlt, FaDrawPolygon, FaRoad, FaLayerGroup } from "react-icons/fa";
 import { Sparklines, SparklinesLine } from "react-sparklines";
-import "../app.css"; // 
+import "../App.css";
 // Fix default Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
