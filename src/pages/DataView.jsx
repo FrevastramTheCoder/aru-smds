@@ -10,6 +10,15 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+// Fix default Leaflet icon path
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+});
+
 function DataView() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -36,7 +45,6 @@ function DataView() {
       });
   }, []);
 
-  // Query / Filter
   const executeQuery = () => {
     setLoading(true);
     const result =
@@ -53,7 +61,6 @@ function DataView() {
     toast.success(`Query run successfully. Rows affected: ${result.length}`);
   };
 
-  // Export to GeoJSON
   const exportToGeoJSON = () => {
     const geoJSON = {
       type: "FeatureCollection",
@@ -70,7 +77,6 @@ function DataView() {
     window.URL.revokeObjectURL(url);
   };
 
-  // Export to CSV
   const exportToCSV = () => {
     const rows = (filteredData.length > 0 ? filteredData : data).map(
       (f) => f.properties
@@ -85,7 +91,6 @@ function DataView() {
     window.URL.revokeObjectURL(url);
   };
 
-  // Export to Excel
   const exportToXLSX = () => {
     const rows = (filteredData.length > 0 ? filteredData : data).map(
       (f) => f.properties
@@ -109,7 +114,6 @@ function DataView() {
 
       {error && <p className="text-red-500 mb-2">{error}</p>}
 
-      {/* Top Controls */}
       <div className="flex justify-between items-center mb-6">
         <input
           type="text"
@@ -130,7 +134,6 @@ function DataView() {
         >
           View Map
         </button>
-        {/* Export Dropdown */}
         <div className="relative inline-block text-left">
           <button className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm">
             Export
@@ -160,7 +163,6 @@ function DataView() {
         </div>
       </div>
 
-      {/* Data Table */}
       <div className="overflow-x-auto shadow-lg rounded-lg border border-gray-200">
         <table className="min-w-full bg-white text-sm">
           <thead>
@@ -180,7 +182,7 @@ function DataView() {
             {loading ? (
               <tr>
                 <td
-                  colSpan="100%"
+                  colSpan={data[0] ? Object.keys(data[0].properties).length : 1}
                   className="text-center py-6 text-gray-500 text-sm"
                 >
                   Loading...
@@ -202,7 +204,7 @@ function DataView() {
             ) : (
               <tr>
                 <td
-                  colSpan="100%"
+                  colSpan={data[0] ? Object.keys(data[0].properties).length : 1}
                   className="text-center py-6 text-blue-500 text-sm"
                 >
                   No data output. Execute a query to get output.
@@ -213,7 +215,6 @@ function DataView() {
         </table>
       </div>
 
-      {/* Map Modal */}
       {showMap && (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-3/4 h-3/4 relative">
@@ -229,20 +230,15 @@ function DataView() {
               style={{ width: "100%", height: "100%" }}
             >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              {(filteredData.length > 0 ? filteredData : data).map((f, i) =>
-                f.geometry?.type === "Point" ? (
+              {(filteredData.length > 0 ? filteredData : data)
+                .filter((f) => f.geometry?.type === "Point")
+                .map((f, i) => (
                   <Marker
                     key={i}
                     position={[
                       f.geometry.coordinates[1],
                       f.geometry.coordinates[0],
                     ]}
-                    icon={
-                      new L.Icon({
-                        iconUrl:
-                          "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-                      })
-                    }
                   >
                     <Popup>
                       {Object.entries(f.properties).map(([k, v]) => (
@@ -252,8 +248,7 @@ function DataView() {
                       ))}
                     </Popup>
                   </Marker>
-                ) : null
-              )}
+                ))}
             </MapContainer>
           </div>
         </div>
