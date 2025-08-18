@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
+
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
@@ -17,7 +18,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import { FaMapMarkerAlt, FaDrawPolygon, FaRoad, FaLayerGroup } from "react-icons/fa";
 import { Sparklines, SparklinesLine } from "react-sparklines";
-
+import "../app.css"; // 
 // Fix default Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
