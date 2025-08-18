@@ -1,4 +1,3 @@
-// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -14,7 +13,7 @@ import SystemDashboard from './pages/SystemDashboard';
 import AdminPanel from './pages/AdminPanel';
 import MapView from './pages/MapView';
 import DataManagement from './pages/DatamanagementPage.jsx';
-import DataView from './pages/DataView.jsx'; // <-- New Data View Page
+import DataView from './pages/DataView.jsx'; // <-- Data View Page
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -24,7 +23,8 @@ import GoogleAuthCallback from "./components/GoogleAuthCallback";
  * Main application component with routing and authentication provider.
  */
 function App() {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '955498693856-p6rkogqc5i54vtfm0pek76kvb9hgcbl7.apps.googleusercontent.com';
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 
+    '955498693856-p6rkogqc5i54vtfm0pek76kvb9hgcbl7.apps.googleusercontent.com';
 
   return (
     <GoogleOAuthProvider clientId={clientId}>
@@ -48,7 +48,7 @@ function App() {
                 <Route path="/admin" element={<AdminPanel />} />
                 <Route path="/map" element={<MapView />} />
                 <Route path="/data" element={<DataManagement />} />
-                <Route path="/data-view" element={<DataView />} /> {/* New Data View Page */}
+                <Route path="/data-view" element={<DataView />} /> {/* Corrected Data View Route */}
               </Route>
             </Routes>
           </div>
