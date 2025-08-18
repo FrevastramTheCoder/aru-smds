@@ -16,9 +16,9 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import { FaMapMarkerAlt, FaDrawPolygon, FaRoad, FaLayerGroup } from "react-icons/fa";
 import { Sparklines, SparklinesLine } from "react-sparklines";
 import "../App.css";
+
 // Fix default Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -28,7 +28,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
 });
 
-// Dynamically import EditControl to fix default export issue
+// Dynamically import EditControl
 const EditControl = React.lazy(() =>
   import("react-leaflet-draw").then((mod) => ({ default: mod.EditControl }))
 );
@@ -40,40 +40,48 @@ function DataView() {
   const [loading, setLoading] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
-  const [historyPoints, setHistoryPoints] = useState([]);
-  const [historyPolygons, setHistoryPolygons] = useState([]);
-  const [historyLines, setHistoryLines] = useState([]);
-  const [historyFeatures, setHistoryFeatures] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(20);
 
   const mapRef = useRef(null);
 
-  useEffect(() => {
-    axios
-      .get(
-        "https://smds.onrender.com/api/v1/auth/geojson/security?simplify=0.0005"
-      )
-      .then((res) => {
-        if (res.data && res.data.features) {
-          setData(res.data.features);
-          setFilteredData(res.data.features);
-          updateHistory(res.data.features);
-        }
-      })
-      .catch((err) => console.error(err));
-  }, []);
+  const layerName = "security"; // Change this to any spatial layer you want
+  const token = localStorage.getItem("token"); // JWT token stored in localStorage
 
-  const updateHistory = (features) => {
-    setHistoryPoints((prev) =>
-      [...prev, features.filter((f) => f.geometry?.type === "Point").length].slice(-10)
-    );
-    setHistoryPolygons((prev) =>
-      [...prev, features.filter((f) => f.geometry?.type === "Polygon").length].slice(-10)
-    );
-    setHistoryLines((prev) =>
-      [...prev, features.filter((f) => f.geometry?.type === "LineString").length].slice(-10)
-    );
-    setHistoryFeatures((prev) => [...prev, features.length].slice(-10));
+  const fetchData = async (pageNumber = 1) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(
+        `https://smds.onrender.com/api/v1/auth/data/${layerName}?page=${pageNumber}&limit=${limit}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      if (res.data) {
+        const rows = res.data.data.map((r) => ({
+          id: r.id,
+          attributes: r.attributes,
+          geometry: r.geometry,
+        }));
+        setData(rows);
+        setFilteredData(rows);
+        setPage(res.data.page);
+        setTotalPages(res.data.totalPages);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const executeQuery = () => {
     setLoading(true);
@@ -81,20 +89,23 @@ function DataView() {
       searchTerm.toLowerCase() === "all data"
         ? data
         : data.filter((f) =>
-            Object.values(f.properties).some((val) =>
+            Object.values(f.attributes).some((val) =>
               val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
             )
           );
     setFilteredData(result);
     setLoading(false);
-    updateHistory(result);
-    toast.success(`Query run successfully. Rows affected: ${result.length}`);
+    toast.success(`Query run successfully. Rows found: ${result.length}`);
   };
 
   const exportToGeoJSON = () => {
     const geoJSON = {
       type: "FeatureCollection",
-      features: filteredData.length > 0 ? filteredData : data,
+      features: filteredData.map((f) => ({
+        type: "Feature",
+        geometry: f.geometry,
+        properties: f.attributes,
+      })),
     };
     const blob = new Blob([JSON.stringify(geoJSON)], { type: "application/json" });
     const url = window.URL.createObjectURL(blob);
@@ -106,9 +117,7 @@ function DataView() {
   };
 
   const exportToCSV = () => {
-    const rows = (filteredData.length > 0 ? filteredData : data).map(
-      (f) => f.properties
-    );
+    const rows = filteredData.map((f) => f.attributes);
     const csv = Papa.unparse(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -120,9 +129,7 @@ function DataView() {
   };
 
   const exportToXLSX = () => {
-    const rows = (filteredData.length > 0 ? filteredData : data).map(
-      (f) => f.properties
-    );
+    const rows = filteredData.map((f) => f.attributes);
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Spatial Data");
@@ -144,11 +151,8 @@ function DataView() {
           f.geometry?.type === "Point" &&
           layer.getBounds().contains([f.geometry.coordinates[1], f.geometry.coordinates[0]])
       );
-    } else if (layer instanceof L.Polyline) {
-      result = data.filter((f) => f.geometry?.type === "Point");
     }
     setFilteredData(result);
-    updateHistory(result);
     toast.info(`Filtered ${result.length} features inside drawn shape`);
   };
 
@@ -160,12 +164,7 @@ function DataView() {
   return (
     <div className="container mx-auto my-8 px-4">
       <ToastContainer />
-      <h1 className="text-3xl font-bold mb-6 text-center">Spatial Data Dashboard</h1>
-
-      {/* Dashboard Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        {/* Cards for Features, Points, Polygons, Lines */}
-      </div>
+      <h1 className="text-3xl font-bold mb-6 text-center">Data View</h1>
 
       {/* Controls */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-3">
@@ -180,7 +179,7 @@ function DataView() {
           onClick={executeQuery}
           className="rounded bg-green-600 text-white py-2 px-4 font-semibold hover:bg-green-700 transition text-sm"
         >
-          View/Query Data
+          Search
         </button>
         <button
           onClick={() => setShowMap(!showMap)}
@@ -194,27 +193,68 @@ function DataView() {
           </button>
           <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
             <div className="py-1">
-              <button
-                onClick={exportToCSV}
-                className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-              >
+              <button onClick={exportToCSV} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left">
                 Export as CSV
               </button>
-              <button
-                onClick={exportToGeoJSON}
-                className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-              >
+              <button onClick={exportToGeoJSON} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left">
                 Export as GeoJSON
               </button>
-              <button
-                onClick={exportToXLSX}
-                className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-              >
+              <button onClick={exportToXLSX} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left">
                 Export as XLSX
               </button>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Data Table */}
+      <div className="overflow-x-auto">
+        <table className="table-auto border-collapse border border-gray-300 w-full text-sm">
+          <thead className="bg-gray-200">
+            <tr>
+              <th className="border border-gray-300 px-2 py-1">ID</th>
+              {filteredData[0] &&
+                Object.keys(filteredData[0].attributes).map((col) => (
+                  <th key={col} className="border border-gray-300 px-2 py-1">
+                    {col}
+                  </th>
+                ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.map((row) => (
+              <tr key={row.id} className="hover:bg-gray-100">
+                <td className="border border-gray-300 px-2 py-1">{row.id}</td>
+                {Object.values(row.attributes).map((val, i) => (
+                  <td key={i} className="border border-gray-300 px-2 py-1">
+                    {val?.toString()}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex justify-between mt-4">
+        <button
+          onClick={() => fetchData(Math.max(page - 1, 1))}
+          disabled={page === 1}
+          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        <button
+          onClick={() => fetchData(Math.min(page + 1, totalPages))}
+          disabled={page === totalPages}
+          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+        >
+          Next
+        </button>
       </div>
 
       {/* Map Modal */}
@@ -234,16 +274,23 @@ function DataView() {
                   <EditControl
                     position="topright"
                     onCreated={onCreated}
-                    draw={{ rectangle: true, circle: false, circlemarker: false, marker: false, polygon: true, polyline: true }}
+                    draw={{
+                      rectangle: true,
+                      circle: false,
+                      circlemarker: false,
+                      marker: false,
+                      polygon: true,
+                      polyline: true,
+                    }}
                   />
                 </Suspense>
               </FeatureGroup>
-              {(filteredData.length > 0 ? filteredData : data)
+              {filteredData
                 .filter((f) => f.geometry?.type === "Point")
                 .map((f, i) => (
                   <Marker key={i} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}>
                     <Popup>
-                      {Object.entries(f.properties).map(([k, v]) => (
+                      {Object.entries(f.attributes).map(([k, v]) => (
                         <div key={k}>
                           <strong>{k}:</strong> {v?.toString()}
                         </div>
