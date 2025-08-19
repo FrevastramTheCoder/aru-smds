@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
-
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
@@ -13,10 +12,11 @@ import {
   Marker,
   Popup,
   FeatureGroup,
+  Polygon,
+  Polyline,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import { Sparklines, SparklinesLine } from "react-sparklines";
 import "../App.css";
 
 // Fix default Leaflet icons
@@ -39,12 +39,20 @@ function DataView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [layerName, setLayerName] = useState("security"); // default layer
 
   const mapRef = useRef(null);
 
-  const layerName = "security"; // Change this to any spatial layer you want
+  // Available layers (only valid ones from your backend)
+  const availableLayers = [
+    "security",
+    "water_supply",
+    "drainage",
+    "vimbweta",
+    // add more if confirmed they exist
+  ];
 
-  // Corrected fetchData using /geojson endpoint
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -62,7 +70,7 @@ function DataView() {
       }
     } catch (err) {
       console.error(err);
-      toast.error("Failed to fetch data");
+      toast.error(`Failed to fetch layer: ${layerName}`);
     } finally {
       setLoading(false);
     }
@@ -70,7 +78,8 @@ function DataView() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+    // eslint-disable-next-line
+  }, [layerName]);
 
   const executeQuery = () => {
     setLoading(true);
@@ -96,11 +105,13 @@ function DataView() {
         properties: f.attributes,
       })),
     };
-    const blob = new Blob([JSON.stringify(geoJSON)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(geoJSON)], {
+      type: "application/json",
+    });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "spatial_data.geojson";
+    a.download = `${layerName}_data.geojson`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -112,7 +123,7 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "spatial_data.csv";
+    a.download = `${layerName}_data.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -126,7 +137,7 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "spatial_data.xlsx";
+    a.download = `${layerName}_data.xlsx`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -138,7 +149,12 @@ function DataView() {
       result = data.filter(
         (f) =>
           f.geometry?.type === "Point" &&
-          layer.getBounds().contains([f.geometry.coordinates[1], f.geometry.coordinates[0]])
+          layer
+            .getBounds()
+            .contains([
+              f.geometry.coordinates[1],
+              f.geometry.coordinates[0],
+            ])
       );
     }
     setFilteredData(result);
@@ -152,6 +168,19 @@ function DataView() {
 
       {/* Controls */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-3">
+        {/* Layer Selector */}
+        <select
+          value={layerName}
+          onChange={(e) => setLayerName(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-2 text-sm"
+        >
+          {availableLayers.map((layer) => (
+            <option key={layer} value={layer}>
+              {layer}
+            </option>
+          ))}
+        </select>
+
         <input
           type="text"
           placeholder="Query data here..."
@@ -172,22 +201,36 @@ function DataView() {
           View Map
         </button>
         <div className="relative inline-block text-left">
-          <button className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm">
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm"
+          >
             Export
           </button>
-          <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
-            <div className="py-1">
-              <button onClick={exportToCSV} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left">
-                Export as CSV
-              </button>
-              <button onClick={exportToGeoJSON} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left">
-                Export as GeoJSON
-              </button>
-              <button onClick={exportToXLSX} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left">
-                Export as XLSX
-              </button>
+          {showExportMenu && (
+            <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
+              <div className="py-1">
+                <button
+                  onClick={exportToCSV}
+                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
+                >
+                  Export as CSV
+                </button>
+                <button
+                  onClick={exportToGeoJSON}
+                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
+                >
+                  Export as GeoJSON
+                </button>
+                <button
+                  onClick={exportToXLSX}
+                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
+                >
+                  Export as XLSX
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -230,7 +273,12 @@ function DataView() {
             >
               X
             </button>
-            <MapContainer ref={mapRef} center={[0, 0]} zoom={5} style={{ width: "100%", height: "100%" }}>
+            <MapContainer
+              ref={mapRef}
+              center={[0, 0]}
+              zoom={5}
+              style={{ width: "100%", height: "100%" }}
+            >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               <FeatureGroup>
                 <Suspense fallback={null}>
@@ -248,19 +296,49 @@ function DataView() {
                   />
                 </Suspense>
               </FeatureGroup>
-              {filteredData
-                .filter((f) => f.geometry?.type === "Point")
-                .map((f, i) => (
-                  <Marker key={i} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}>
-                    <Popup>
-                      {Object.entries(f.attributes).map(([k, v]) => (
-                        <div key={k}>
-                          <strong>{k}:</strong> {v?.toString()}
-                        </div>
-                      ))}
-                    </Popup>
-                  </Marker>
-                ))}
+
+              {/* Render features */}
+              {filteredData.map((f, i) => {
+                if (f.geometry?.type === "Point") {
+                  return (
+                    <Marker
+                      key={i}
+                      position={[
+                        f.geometry.coordinates[1],
+                        f.geometry.coordinates[0],
+                      ]}
+                    >
+                      <Popup>
+                        {Object.entries(f.attributes).map(([k, v]) => (
+                          <div key={k}>
+                            <strong>{k}:</strong> {v?.toString()}
+                          </div>
+                        ))}
+                      </Popup>
+                    </Marker>
+                  );
+                } else if (f.geometry?.type === "Polygon") {
+                  return (
+                    <Polygon
+                      key={i}
+                      positions={f.geometry.coordinates[0].map((c) => [
+                        c[1],
+                        c[0],
+                      ])}
+                      color="blue"
+                    />
+                  );
+                } else if (f.geometry?.type === "LineString") {
+                  return (
+                    <Polyline
+                      key={i}
+                      positions={f.geometry.coordinates.map((c) => [c[1], c[0]])}
+                      color="red"
+                    />
+                  );
+                }
+                return null;
+              })}
             </MapContainer>
           </div>
         </div>
