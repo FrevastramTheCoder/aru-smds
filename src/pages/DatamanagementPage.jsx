@@ -1,281 +1,403 @@
-
 // src/pages/DatamanagementPage.jsx
-import React, { useEffect, useState, useRef, Suspense } from "react";
-import axios from "axios";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import * as XLSX from "xlsx";
-import Papa from "papaparse";
-import L from "leaflet";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
+  GeoJSON,
   FeatureGroup,
+  useMapEvents,
   LayersControl,
-  LayerGroup,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import "../App.css";
+import { EditControl } from "react-leaflet-draw";
+import shp from "shpjs";
+import * as turf from "@turf/turf";
+import L from "leaflet";
+import "leaflet-snap";
+import "leaflet-control-geocoder";
+import "../App.css"; // keep your custom styles
+import "./customMapStyles.css"; // optional additional styles
 
-// Fix default Leaflet icons
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-});
-
-// Dynamically import EditControl
-const EditControl = React.lazy(() =>
-  import("react-leaflet-draw").then((mod) => ({ default: mod.EditControl }))
-);
-
-const layersList = [
-  { key: "buildings", label: "Buildings" },
-  { key: "roads", label: "Roads" },
-  { key: "footpaths", label: "Footpaths" },
-  { key: "vegetation", label: "Vegetation" },
-  { key: "parking", label: "Parking" },
-  { key: "solid_waste", label: "Solid Waste" },
-  { key: "electricity", label: "Electricity" },
-  { key: "water_supply", label: "Water Supply" },
-  { key: "drainage", label: "Drainage System" },
-  { key: "vimbweta", label: "Vimbweta" },
-  { key: "security", label: "Security Lights" },
-  { key: "recreational_areas", label: "Recreational Areas" },
-];
-
-function DatamanagementPage() {
-  const [dataMap, setDataMap] = useState({});
-  const [filteredMap, setFilteredMap] = useState({});
-  const [layerVisibility, setLayerVisibility] = useState({});
-  const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+const DatamanagementPage = () => {
+  const [data, setData] = useState({
     name: "",
-    layer: "",
+    uses: "",
+    dimensions: "",
+    latitude: "",
+    longitude: "",
+    geo: "",
+    geometry: "",
   });
-  const mapRef = useRef(null);
-  const token = localStorage.getItem("token");
+
+  const [coordinates, setCoordinates] = useState(null);
+  const [shapefileData, setShapefileData] = useState(null);
+  const [polygonData, setPolygonData] = useState(null);
+  const [markerData, setMarkerData] = useState(null);
+  const [allShapes, setAllShapes] = useState([]); 
+  const navigate = useNavigate();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const vis = {};
-    layersList.forEach((l) => (vis[l.key] = true));
-    setLayerVisibility(vis);
+    const savedData = JSON.parse(localStorage.getItem("formData"));
+    if (savedData) {
+      setData(savedData);
+    }
   }, []);
 
-  useEffect(() => {
-    layersList.forEach((l) => fetchLayerData(l.key));
-  }, []);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const newData = { ...data, [name]: value };
+    setData(newData);
+    localStorage.setItem("formData", JSON.stringify(newData));
+  };
 
-  const fetchLayerData = async (layer) => {
-    setLoading(true);
+  const validateForm = () => {
+    if (!data.name || !data.latitude || !data.longitude) {
+      alert("Name, Latitude, and Longitude are required!");
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    setIsSaving(true);
+
+    const lat = parseFloat(data.latitude);
+    const lng = parseFloat(data.longitude);
+
+    let geoType = data.geo || "Point";
+    let geometry = {
+      type: geoType,
+      coordinates: [lng, lat],
+    };
+
+    if (polygonData) {
+      geoType = polygonData.geometry.type;
+      geometry = polygonData.geometry;
+    }
+
+    const payload = {
+      ...data,
+      latitude: lat,
+      longitude: lng,
+      geo: geoType,
+      geometry: JSON.stringify(geometry),
+    };
+
     try {
-      let res;
-      try {
-        res = await axios.get(
-          `https://smds.onrender.com/api/v1/auth/data/${layer}?page=1&limit=1000`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      } catch (err) {
-        if (err.response?.status === 404) {
-          res = await axios.get(
-            `https://smds.onrender.com/api/v1/auth/geojson/${layer}?simplify=0.0005`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          const geoRows = res.data.features.map((f, i) => ({
-            id: i + 1,
-            attributes: f.properties || {},
-            geometry: f.geometry || {},
-          }));
-          setDataMap((prev) => ({ ...prev, [layer]: geoRows }));
-          setFilteredMap((prev) => ({ ...prev, [layer]: geoRows }));
-          setLoading(false);
-          return;
-        } else {
-          throw err;
-        }
+      const response = await DataServers.saveData(payload);
+
+      if (response.status === 200 || response.status === 201) {
+        alert("Data saved successfully!");
+        localStorage.setItem("formData", JSON.stringify(payload));
+      } else {
+        alert("Unexpected response: " + response.statusText);
       }
-      if (res.data) {
-        const rows = res.data.data.map((r) => ({
-          id: r.id,
-          attributes: r.attributes,
-          geometry: r.geometry,
-        }));
-        setDataMap((prev) => ({ ...prev, [layer]: rows }));
-        setFilteredMap((prev) => ({ ...prev, [layer]: rows }));
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(`Failed to fetch layer ${layer}`);
+    } catch (error) {
+      console.error("Error saving data:", error);
+      const errorMessage =
+        error.response?.data?.message || "An unknown error occurred.";
+      alert(`Error: ${errorMessage}`);
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
-  const toggleLayer = (key) => {
-    setLayerVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+  const handleShapefileUpload = (e) => {
+    const files = e.target.files;
+    if (files.length === 0) {
+      alert("Please select a shapefile zip archive.");
+      return;
+    }
 
-  const executeSearch = () => {
-    const newFiltered = {};
-    layersList.forEach((l) => {
-      const rows = dataMap[l.key] || [];
-      newFiltered[l.key] =
-        searchTerm.toLowerCase() === "all data"
-          ? rows
-          : rows.filter((f) =>
-              Object.values(f.attributes).some((val) =>
-                val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-              )
-            );
-    });
-    setFilteredMap(newFiltered);
-    toast.success("Search completed.");
-  };
+    const zipFile = Array.from(files).find((file) =>
+      file.name.endsWith(".zip")
+    );
+    if (!zipFile) {
+      alert("Please upload a shapefile in .zip format.");
+      return;
+    }
 
-  const exportLayerToGeoJSON = (layer) => {
-    const layerData = filteredMap[layer] || [];
-    const geoJSON = {
-      type: "FeatureCollection",
-      features: layerData.map((f) => ({
-        type: "Feature",
-        geometry: f.geometry,
-        properties: f.attributes,
-      })),
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const arrayBuffer = event.target.result;
+
+      try {
+        shp(arrayBuffer)
+          .then((geojson) => {
+            setShapefileData(geojson);
+            if (geojson.features.length > 0) {
+              const firstFeature = geojson.features[0];
+              setPolygonData(firstFeature);
+              setData((prevData) => ({
+                ...prevData,
+                geo: firstFeature.geometry.type,
+              }));
+            }
+          })
+          .catch((error) => {
+            console.error("Error reading shapefile:", error);
+            alert("Failed to parse shapefile.");
+          });
+      } catch (error) {
+        console.error("Error reading shapefile:", error);
+        alert("Failed to read shapefile.");
+      }
     };
-    const blob = new Blob([JSON.stringify(geoJSON)], { type: "application/json" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${layer}.geojson`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+
+    reader.readAsArrayBuffer(zipFile);
   };
 
-  const onCreated = (e) => {
-    toast.info("Polygon drawn. Filtering not implemented in design mode.");
+  const handleClear = () => {
+    setData({
+      name: "",
+      uses: "",
+      dimensions: "",
+      latitude: "",
+      longitude: "",
+      geo: "",
+      geometry: "",
+    });
+    setCoordinates(null);
+    setShapefileData(null);
+    setPolygonData(null);
+    setMarkerData(null);
+    setAllShapes([]); 
+    localStorage.removeItem("formData");
+  };
+
+  const MapClickHandler = () => {
+    useMapEvents({
+      click(e) {
+        const { lat, lng } = e.latlng;
+        setCoordinates({ lat, lng });
+        setMarkerData({ lat, lng });
+
+        setData((prevData) => ({
+          ...prevData,
+          latitude: lat,
+          longitude: lng,
+          geo: "Point",
+        }));
+      },
+    });
+    return null;
+  };
+
+  const handlePolygonDrawn = (e) => {
+    const { layer } = e;
+    const geoJSON = layer.toGeoJSON();
+    const geoType = geoJSON.geometry.type;
+    const coordinates = geoJSON.geometry.coordinates;
+
+    let latitude = "";
+    let longitude = "";
+    if (geoType === "LineString") {
+      [longitude, latitude] = coordinates[0];
+    } else if (geoType === "Polygon") {
+      [longitude, latitude] = coordinates[0][0];
+    }
+
+    let dimensions = "";
+    if (geoType === "LineString") {
+      const lineString = turf.lineString(coordinates);
+      dimensions = turf.length(lineString).toFixed(2) + " meters";
+    } else if (geoType === "Polygon") {
+      const polygon = turf.polygon(coordinates);
+      dimensions = turf.area(polygon).toFixed(2) + " square meters";
+    }
+
+    setPolygonData(geoJSON);
+    setAllShapes((prevShapes) => [...prevShapes, geoJSON]); 
+    setData((prevData) => ({
+      ...prevData,
+      geo: geoType,
+      latitude,
+      longitude,
+      dimensions,
+    }));
+  };
+
+  const handleSaveLayer = () => {
+    if (allShapes.length === 0) {
+      alert("No shape or line has been drawn!");
+      return;
+    }
+
+    const savedGeometry = allShapes.map((shape) => shape.geometry);
+
+    setData((prevData) => ({
+      ...prevData,
+      geo: "MultiGeometry",
+      geometry: JSON.stringify(savedGeometry),
+    }));
+
+    alert("All layers saved successfully!");
+    localStorage.setItem(
+      "formData",
+      JSON.stringify({
+        ...data,
+        geo: "MultiGeometry",
+        geometry: JSON.stringify(savedGeometry),
+      })
+    );
+  };
+
+  const handleExportLayer = () => {
+    if (allShapes.length === 0) {
+      alert("No layers to export!");
+      return;
+    }
+
+    const geoJsonBlob = new Blob(
+      [JSON.stringify({ type: "FeatureCollection", features: allShapes })],
+      { type: "application/json" }
+    );
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(geoJsonBlob);
+    link.download = `${data.name || "exported_layers"}.geojson`;
+    link.click();
   };
 
   return (
-    <div className="flex max-w-7xl mx-auto shadow-2xl h-[700px] mt-4 mb-4 bg-gray-100">
-      <ToastContainer />
-      {/* Left Form Panel */}
-      <div className="w-1/2 px-6 py-6 flex flex-col justify-start items-start bg-white">
-        <h1 className="text-2xl font-bold mb-4">Data Management</h1>
-
-        {/* Search & Layer Selection */}
-        <div className="w-full space-y-4 mb-4">
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border px-4 py-2 rounded w-full"
-          />
-          <button
-            onClick={executeSearch}
-            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-          >
-            Search
-          </button>
-        </div>
-
-        {/* Layer Controls */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {layersList.map((l) => (
-            <div key={l.key} className="flex gap-1">
-              <button
-                onClick={() => toggleLayer(l.key)}
-                className={`px-3 py-1 rounded font-semibold ${
-                  layerVisibility[l.key] ? "bg-green-600 text-white" : "bg-gray-300 text-gray-700"
-                }`}
-              >
-                {l.label}
-              </button>
-              <button
-                onClick={() => exportLayerToGeoJSON(l.key)}
-                className="px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
-              >
-                GeoJSON
-              </button>
-              <button
-                onClick={() => exportLayerToCSV(l.key)}
-                className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                CSV
-              </button>
-              <button
-                onClick={() => exportLayerToXLSX(l.key)}
-                className="px-2 py-1 bg-orange-600 text-white rounded hover:bg-orange-700"
-              >
-                XLSX
-              </button>
+    <div className="flex max-w-7xl mx-auto shadow-2xl h-[600px] mt-4 mb-4 bg-gray-100">
+      <div className="w-1/2 px-4 py-4 flex flex-col justify-center items-center bg-white">
+        <h1 className="text-xl font-bold mb-4">Data Management</h1>
+        <div className="w-full space-y-4">
+          {[
+            { label: "Uses", name: "uses" },
+            { label: "Dimensions", name: "dimensions" },
+            { label: "Name", name: "name" },
+            { label: "Latitude", name: "latitude" },
+            { label: "Longitude", name: "longitude" },
+            { label: "Geo", name: "geo" },
+          ].map(({ label, name }) => (
+            <div key={name} className="flex items-center space-x-2">
+              <label className="text-gray-700 text-sm font-medium w-1/4">
+                {label}
+              </label>
+              <input
+                type="text"
+                name={name}
+                value={data[name]}
+                onChange={handleChange}
+                className="h-7 w-full border rounded-md px-2 py-1 bg-gray-50"
+                placeholder={`Enter ${label.toLowerCase()}`}
+              />
             </div>
           ))}
+          <div className="space-x-2 flex items-center justify-between">
+            <button
+              onClick={handleSave}
+              className="bg-green-500 text-white py-2 px-3 rounded"
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </button>
+            <button
+              onClick={handleClear}
+              className="bg-red-500 text-white py-2 px-3 rounded"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => navigate("/datatable")}
+              className="bg-blue-500 text-white py-2 px-3 rounded"
+            >
+              View / Update / Delete / Query
+            </button>
+            <button
+              onClick={handleSaveLayer}
+              className="bg-purple-500 text-white py-2 px-3 rounded"
+            >
+              Save All Layers
+            </button>
+            <button
+              onClick={handleExportLayer}
+              className="bg-yellow-500 text-white py-2 px-3 rounded"
+            >
+              Export All Layers
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Right Map Panel */}
-      <div className="w-1/2 flex flex-col" style={{ height: "100%" }}>
+      <div className="w-1/2 flex flex-col" style={{ height: "600px" }}>
+        <input type="file" accept=".zip" onChange={handleShapefileUpload} />
         <MapContainer
-          ref={mapRef}
-          center={[0, 0]}
-          zoom={5}
-          style={{ width: "100%", height: "100%" }}
+          center={{ lat: -6.7922, lng: 39.2396 }}
+          zoom={coordinates ? 16 : 2}
+          style={{ height: "100%", width: "100%" }}
+          maxZoom={30}
+          minZoom={1}
         >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <FeatureGroup>
-            <Suspense fallback={null}>
-              <EditControl
-                position="topright"
-                onCreated={onCreated}
-                draw={{
-                  rectangle: true,
-                  circle: false,
-                  polygon: true,
-                  polyline: true,
-                  marker: false,
-                }}
-              />
-            </Suspense>
-          </FeatureGroup>
-
           <LayersControl position="topright">
-            {layersList.map(
-              (l) =>
-                layerVisibility[l.key] && (
-                  <LayersControl.Overlay key={l.key} name={l.label} checked>
-                    <LayerGroup>
-                      {(filteredMap[l.key] || [])
-                        .filter((f) => f.geometry?.type === "Point")
-                        .map((f, i) => (
-                          <Marker
-                            key={i}
-                            position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}
-                          >
-                            <Popup>
-                              {Object.entries(f.attributes).map(([k, v]) => (
-                                <div key={k}>
-                                  <strong>{k}:</strong> {v?.toString()}
-                                </div>
-                              ))}
-                            </Popup>
-                          </Marker>
-                        ))}
-                    </LayerGroup>
-                  </LayersControl.Overlay>
-                )
-            )}
+            <LayersControl.BaseLayer checked name="OpenStreetMap">
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                maxZoom={30}
+                minZoom={1}
+              />
+            </LayersControl.BaseLayer>
+            <LayersControl.BaseLayer name="Google Satellite">
+              <TileLayer
+                url="http://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}"
+                maxZoom={30}
+                minZoom={1}
+              />
+            </LayersControl.BaseLayer>
+            <LayersControl.BaseLayer name="Google Hybrid">
+              <TileLayer
+                url="http://mt0.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}"
+                maxZoom={30}
+                minZoom={1}
+              />
+            </LayersControl.BaseLayer>
           </LayersControl>
+
+          <MapClickHandler />
+
+          {allShapes.map((shape, index) => (
+            <GeoJSON key={index} data={shape} />
+          ))}
+
+          {markerData && (
+            <Marker position={markerData}>
+              <Popup>
+                <strong>{data.name || "Captured Location"}</strong>
+                <br /> Latitude: {markerData.lat.toFixed(6)}
+                <br /> Longitude: {markerData.lng.toFixed(6)}
+              </Popup>
+            </Marker>
+          )}
+
+          <FeatureGroup>
+            <EditControl
+              position="topright"
+              onCreated={handlePolygonDrawn}
+              draw={{
+                polygon: true,
+                polyline: true,
+                rectangle: false,
+                circle: false,
+              }}
+              edit={{
+                remove: true,
+                snap: true,
+              }}
+            />
+          </FeatureGroup>
         </MapContainer>
       </div>
     </div>
   );
-}
+};
 
 export default DatamanagementPage;
