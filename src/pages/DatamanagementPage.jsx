@@ -1,3 +1,4 @@
+
 // src/pages/DatamanagementPage.jsx
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import axios from "axios";
@@ -54,6 +55,10 @@ function DatamanagementPage() {
   const [layerVisibility, setLayerVisibility] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    layer: "",
+  });
   const mapRef = useRef(null);
   const token = localStorage.getItem("token");
 
@@ -212,16 +217,6 @@ function DatamanagementPage() {
               </button>
             </div>
           ))}
-        </div>
-
-        {/* Bottom Buttons */}
-        <div className="flex flex-wrap gap-2 justify-center w-full mt-auto">
-          <button className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Upload</button>
-          <button className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Save</button>
-          <button className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Clear</button>
-          <button className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600">
-            View / Update / Edit / Query
-          </button>
         </div>
       </div>
 
