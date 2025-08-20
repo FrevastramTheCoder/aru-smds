@@ -1,4 +1,3 @@
-// src/pages/DataView.jsx
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
@@ -40,48 +39,75 @@ function DataView() {
   const [loading, setLoading] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [layerName, setLayerName] = useState("security"); // default layer
-
+  const [layerName, setLayerName] = useState(""); // Initialize as empty to force selection
   const mapRef = useRef(null);
 
-  // Available layers (only valid ones from your backend)
+  // Available layers (based on valid endpoints, avoiding 404 errors)
   const availableLayers = [
-    "security",
-    "water_supply",
-    "drainage",
-    "vimbweta",
-    // add more if confirmed they exist
+    { value: "security", label: "Security" },
+    { value: "water_supply", label: "Water Supply" },
+    { value: "drainage", label: "Drainage" },
+    { value: "vimbweta", label: "Vimbweta" }, // Verify if this is correct
+    // Add more layers only if confirmed valid via API documentation
   ];
 
-  const fetchData = async () => {
+  // Fetch data with rate-limiting and error handling
+  const fetchData = async (selectedLayer) => {
+    if (!selectedLayer) {
+      toast.error("Please select a layer to fetch data.");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await axios.get(
-        `https://smds.onrender.com/api/v1/auth/geojson/${layerName}?simplify=0.0005`
+      const response = await axios.get(
+        `https://smds.onrender.com/api/v1/auth/geojson/${selectedLayer}?simplify=0.0005`,
+        {
+          headers: {
+            // Add Authorization header if required
+            // 'Authorization': `Bearer ${yourToken}`,
+          },
+        }
       );
-      if (res.data && res.data.features) {
-        const rows = res.data.features.map((f, i) => ({
+      if (response.data && response.data.features) {
+        const rows = response.data.features.map((f, i) => ({
           id: i + 1,
           attributes: f.properties,
           geometry: f.geometry,
         }));
         setData(rows);
         setFilteredData(rows);
+        toast.success(`Successfully fetched ${selectedLayer} data.`);
+      } else {
+        toast.error(`No features found for ${selectedLayer}.`);
       }
     } catch (err) {
-      console.error(err);
-      toast.error(`Failed to fetch layer: ${layerName}`);
+      console.error("Fetch error:", err);
+      if (err.response?.status === 404) {
+        toast.error(`Layer "${selectedLayer}" not found on the server.`);
+      } else if (err.response?.status === 429) {
+        toast.error("Rate limit exceeded. Please wait and try again.");
+      } else {
+        toast.error(`Failed to fetch layer: ${selectedLayer}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch data when layerName changes
   useEffect(() => {
-    fetchData();
+    if (layerName) {
+      fetchData(layerName);
+    }
     // eslint-disable-next-line
   }, [layerName]);
 
+  // Search functionality
   const executeQuery = () => {
+    if (!layerName) {
+      toast.error("Please select a layer before searching.");
+      return;
+    }
     setLoading(true);
     const result =
       searchTerm.toLowerCase() === "all data"
@@ -96,7 +122,12 @@ function DataView() {
     toast.success(`Query run successfully. Rows found: ${result.length}`);
   };
 
+  // Export functions
   const exportToGeoJSON = () => {
+    if (!filteredData.length) {
+      toast.error("No data to export.");
+      return;
+    }
     const geoJSON = {
       type: "FeatureCollection",
       features: filteredData.map((f) => ({
@@ -117,6 +148,10 @@ function DataView() {
   };
 
   const exportToCSV = () => {
+    if (!filteredData.length) {
+      toast.error("No data to export.");
+      return;
+    }
     const rows = filteredData.map((f) => f.attributes);
     const csv = Papa.unparse(rows);
     const blob = new Blob([csv], { type: "text/csv" });
@@ -129,6 +164,10 @@ function DataView() {
   };
 
   const exportToXLSX = () => {
+    if (!filteredData.length) {
+      toast.error("No data to export.");
+      return;
+    }
     const rows = filteredData.map((f) => f.attributes);
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
@@ -142,6 +181,7 @@ function DataView() {
     window.URL.revokeObjectURL(url);
   };
 
+  // Handle shape creation for filtering
   const onCreated = (e) => {
     const layer = e.layer;
     let result = [];
@@ -168,15 +208,18 @@ function DataView() {
 
       {/* Controls */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-3">
-        {/* Layer Selector */}
+        {/* Layer Selector Dropdown */}
         <select
           value={layerName}
           onChange={(e) => setLayerName(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm"
+          className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-1/4 focus:outline-none focus:ring focus:ring-blue-300"
         >
+          <option value="" disabled>
+            Select a Layer
+          </option>
           {availableLayers.map((layer) => (
-            <option key={layer} value={layer}>
-              {layer}
+            <option key={layer.value} value={layer.value}>
+              {layer.label}
             </option>
           ))}
         </select>
@@ -191,12 +234,14 @@ function DataView() {
         <button
           onClick={executeQuery}
           className="rounded bg-green-600 text-white py-2 px-4 font-semibold hover:bg-green-700 transition text-sm"
+          disabled={!layerName || loading}
         >
-          Search
+          {loading ? "Searching..." : "Search"}
         </button>
         <button
           onClick={() => setShowMap(!showMap)}
           className="rounded bg-yellow-600 text-white py-2 px-4 font-semibold hover:bg-yellow-700 transition text-sm"
+          disabled={!layerName}
         >
           View Map
         </button>
@@ -204,6 +249,7 @@ function DataView() {
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
             className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm"
+            disabled={!filteredData.length}
           >
             Export
           </button>
@@ -235,33 +281,39 @@ function DataView() {
       </div>
 
       {/* Data Table */}
-      <div className="overflow-x-auto">
-        <table className="table-auto border-collapse border border-gray-300 w-full text-sm">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="border border-gray-300 px-2 py-1">ID</th>
-              {filteredData[0] &&
-                Object.keys(filteredData[0].attributes).map((col) => (
-                  <th key={col} className="border border-gray-300 px-2 py-1">
-                    {col}
-                  </th>
-                ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-100">
-                <td className="border border-gray-300 px-2 py-1">{row.id}</td>
-                {Object.values(row.attributes).map((val, i) => (
-                  <td key={i} className="border border-gray-300 px-2 py-1">
-                    {val?.toString()}
-                  </td>
-                ))}
+      {filteredData.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="table-auto border-collapse border border-gray-300 w-full text-sm">
+            <thead className="bg-gray-200">
+              <tr>
+                <th className="border border-gray-300 px-2 py-1">ID</th>
+                {filteredData[0] &&
+                  Object.keys(filteredData[0].attributes).map((col) => (
+                    <th key={col} className="border border-gray-300 px-2 py-1">
+                      {col}
+                    </th>
+                  ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredData.map((row) => (
+                <tr key={row.id} className="hover:bg-gray-100">
+                  <td className="border border-gray-300 px-2 py-1">{row.id}</td>
+                  {Object.values(row.attributes).map((val, i) => (
+                    <td key={i} className="border border-gray-300 px-2 py-1">
+                      {val?.toString()}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-center text-gray-500">
+          {layerName ? "No data available for this layer." : "Please select a layer."}
+        </p>
+      )}
 
       {/* Map Modal */}
       {showMap && (
