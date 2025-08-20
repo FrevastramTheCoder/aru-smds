@@ -7,11 +7,13 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+import DataServers from "../Services/DataServers";
 
 // Fix Leaflet default icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
 });
@@ -23,34 +25,43 @@ const DataView = () => {
   const [filteredData, setFilteredData] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showMap, setShowMap] = useState(false);
+  const [layerName, setLayerName] = useState("buildings");
+
+  // Available datasets/layers
+  const availableLayers = ["buildings", "roads", "water_supply", "security"];
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const response = await DataServers.getData();
+        const response = await DataServers.getData(layerName);
         setData(response.data);
+        setFilteredData(response.data);
       } catch (error) {
         console.error("Error fetching data:", error);
+        toast.error(`Failed to fetch ${layerName} data`);
       }
+      setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [layerName]);
 
   const executeQuery = () => {
     setLoading(true);
-    const result = searchTerm.toLowerCase() === "all data"
-      ? data
-      : data.filter((item) => {
-          return (
-            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.id.toString().includes(searchTerm) ||
-            item.uses.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.dimensions?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.latitude.toString().includes(searchTerm) ||
-            item.longitude.toString().includes(searchTerm) ||
-            item.geo.toLowerCase().includes(searchTerm.toLowerCase())
-          );
-        });
+    const result =
+      searchTerm.toLowerCase() === "all data"
+        ? data
+        : data.filter((item) => {
+            return (
+              item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              item.id.toString().includes(searchTerm) ||
+              item.uses?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              item.dimensions?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              item.latitude?.toString().includes(searchTerm) ||
+              item.longitude?.toString().includes(searchTerm) ||
+              item.geo?.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+          });
 
     setFilteredData(result);
     setLoading(false);
@@ -59,7 +70,7 @@ const DataView = () => {
 
   const convertToGeoJSON = () => ({
     type: "FeatureCollection",
-    features: filteredData.map(item => ({
+    features: filteredData.map((item) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [item.longitude, item.latitude] },
       properties: {
@@ -78,7 +89,7 @@ const DataView = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "filteredData.geojson";
+    a.download = `${layerName}_data.geojson`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -89,7 +100,7 @@ const DataView = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "filteredData.csv";
+    a.download = `${layerName}_data.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -102,7 +113,7 @@ const DataView = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "filteredData.xlsx";
+    a.download = `${layerName}_data.xlsx`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -110,21 +121,41 @@ const DataView = () => {
   return (
     <div className="container mx-auto my-8">
       <ToastContainer />
-      <div className="flex justify-between items-center mb-6">
-        <button onClick={() => navigate("addData")} className="rounded bg-blue-600 text-white py-2 px-4 font-semibold hover:bg-blue-700 transition text-sm">Add Data</button>
+      <div className="flex justify-between items-center mb-6 gap-2">
+        <select
+          value={layerName}
+          onChange={(e) => setLayerName(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-2 text-sm"
+        >
+          {availableLayers.map((layer) => (
+            <option key={layer} value={layer}>
+              {layer}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           placeholder="Query data here..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="border border-gray-300 rounded px-4 py-2 w-1/3 focus:outline-none focus:ring focus:ring-blue-300 text-sm"
+          className="border border-gray-300 rounded px-4 py-2 w-1/3 text-sm"
         />
-        <button onClick={executeQuery} className="rounded bg-green-600 text-white py-2 px-4 font-semibold hover:bg-green-700 transition text-sm">View/Query Data</button>
-        <button onClick={() => setShowMap(!showMap)} className="rounded bg-yellow-600 text-white py-2 px-4 font-semibold hover:bg-yellow-700 transition text-sm">View Map</button>
-        <div className="relative inline-block text-left">
-          <button onClick={exportToCSV} className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm">Export CSV</button>
-          <button onClick={exportToGeoJSON} className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm">Export GeoJSON</button>
-          <button onClick={exportToXLSX} className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm">Export XLSX</button>
+        <button onClick={executeQuery} className="rounded bg-green-600 text-white py-2 px-4 hover:bg-green-700 transition text-sm">
+          View/Query Data
+        </button>
+        <button onClick={() => setShowMap(!showMap)} className="rounded bg-yellow-600 text-white py-2 px-4 hover:bg-yellow-700 transition text-sm">
+          View Map
+        </button>
+        <div className="flex gap-2">
+          <button onClick={exportToCSV} className="rounded bg-purple-600 text-white py-2 px-4 hover:bg-purple-700 transition text-sm">
+            Export CSV
+          </button>
+          <button onClick={exportToGeoJSON} className="rounded bg-purple-600 text-white py-2 px-4 hover:bg-purple-700 transition text-sm">
+            Export GeoJSON
+          </button>
+          <button onClick={exportToXLSX} className="rounded bg-purple-600 text-white py-2 px-4 hover:bg-purple-700 transition text-sm">
+            Export XLSX
+          </button>
         </div>
       </div>
 
@@ -132,13 +163,13 @@ const DataView = () => {
         <table className="min-w-full bg-white text-sm">
           <thead>
             <tr className="bg-gray-100">
-              <th className="text-left font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">ID</th>
-              <th className="text-left font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Name</th>
-              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Use</th>
-              <th className="text-center font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Dimensions</th>
-              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Latitude</th>
-              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Longitude</th>
-              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">GeoType</th>
+              <th className="px-4 py-2">ID</th>
+              <th className="px-4 py-2">Name</th>
+              <th className="px-4 py-2">Use</th>
+              <th className="px-4 py-2">Dimensions</th>
+              <th className="px-4 py-2">Latitude</th>
+              <th className="px-4 py-2">Longitude</th>
+              <th className="px-4 py-2">GeoType</th>
             </tr>
           </thead>
           <tbody>
@@ -169,8 +200,12 @@ const DataView = () => {
             <button onClick={() => setShowMap(false)} className="absolute top-4 right-4 text-white bg-gray-800 hover:bg-gray-600 rounded-full p-2">X</button>
             <MapContainer center={[0, 0]} zoom={8} style={{ width: "100%", height: "100%" }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              {filteredData.map((item) => (
-                <Marker key={item.id} position={[item.latitude, item.longitude]} icon={new L.Icon({ iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png" })}>
+              {filteredData.map((item) => item.latitude && item.longitude && (
+                <Marker
+                  key={item.id}
+                  position={[item.latitude, item.longitude]}
+                  icon={new L.Icon({ iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png" })}
+                >
                   <Popup>
                     <strong>{item.name}</strong><br />
                     {item.dimensions}<br />
