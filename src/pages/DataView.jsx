@@ -7,7 +7,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
-import DataServers from "../Services/DataServers";
 
 // Fix Leaflet default icons
 delete L.Icon.Default.prototype._getIconUrl;
