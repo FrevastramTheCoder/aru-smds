@@ -310,4 +310,4 @@ function DataView() {
   );
 }
 
-export default DataView;
+export default DatamanagementPage;

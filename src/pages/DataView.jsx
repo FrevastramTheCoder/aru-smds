@@ -1,402 +1,303 @@
-import React, { useEffect, useState, useRef, Suspense } from "react";
-import axios from "axios";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import * as XLSX from "xlsx";
-import Papa from "papaparse";
+import DataServers from "../Services/DataServers";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  FeatureGroup,
-  Polygon,
-  Polyline,
-} from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import "leaflet-draw/dist/leaflet.draw.css";
-import "../App.css";
+import * as XLSX from "xlsx"; // Import the xlsx library
+import * as turf from '@turf/turf'; // Import the turf library
+import Papa from "papaparse"; // Import PapaParse for CSV export
 
-// Fix default Leaflet icons
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-});
-
-// Dynamically import EditControl
-const EditControl = React.lazy(() =>
-  import("react-leaflet-draw").then((mod) => ({ default: mod.EditControl }))
-);
-
-function DataView() {
+const DataTable = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
   const [showMap, setShowMap] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [layerName, setLayerName] = useState(""); // Initialize as empty to force selection
-  const mapRef = useRef(null);
 
-  // Available layers (based on valid endpoints, avoiding 404 errors)
-  const availableLayers = [
-    { value: "security", label: "Security" },
-    { value: "water_supply", label: "Water Supply" },
-    { value: "drainage", label: "Drainage" },
-    { value: "vimbweta", label: "Vimbweta" }, // Verify if this is correct
-    // Add more layers only if confirmed valid via API documentation
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await DataServers.getData();
+        setData(response.data);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
 
-  // Fetch data with rate-limiting and error handling
-  const fetchData = async (selectedLayer) => {
-    if (!selectedLayer) {
-      toast.error("Please select a layer to fetch data.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await axios.get(
-        `https://smds.onrender.com/api/v1/auth/geojson/${selectedLayer}?simplify=0.0005`,
-        {
-          headers: {
-            // Add Authorization header if required
-            // 'Authorization': `Bearer ${yourToken}`,
-          },
-        }
-      );
-      if (response.data && response.data.features) {
-        const rows = response.data.features.map((f, i) => ({
-          id: i + 1,
-          attributes: f.properties,
-          geometry: f.geometry,
-        }));
-        setData(rows);
-        setFilteredData(rows);
-        toast.success(`Successfully fetched ${selectedLayer} data.`);
-      } else {
-        toast.error(`No features found for ${selectedLayer}.`);
-      }
-    } catch (err) {
-      console.error("Fetch error:", err);
-      if (err.response?.status === 404) {
-        toast.error(`Layer "${selectedLayer}" not found on the server.`);
-      } else if (err.response?.status === 429) {
-        toast.error("Rate limit exceeded. Please wait and try again.");
-      } else {
-        toast.error(`Failed to fetch layer: ${selectedLayer}`);
-      }
-    } finally {
-      setLoading(false);
-    }
+    fetchData();
+  }, []);
+
+  const confirmDelete = (id) => {
+    setDeleteId(id);
+    setShowConfirm(true);
   };
 
-  // Fetch data when layerName changes
-  useEffect(() => {
-    if (layerName) {
-      fetchData(layerName);
+  const handleDelete = async () => {
+    try {
+      await DataServers.deleteData(deleteId);
+      setData((prevData) => prevData.filter((item) => item.id !== deleteId));
+      setFilteredData((prevData) =>
+        prevData.filter((item) => item.id !== deleteId)
+      );
+      toast.success("Data deleted successfully.");
+    } catch (error) {
+      console.error("Error deleting data:", error);
+      alert("Failed to delete data.");
     }
-    // eslint-disable-next-line
-  }, [layerName]);
+    setShowConfirm(false);
+    setDeleteId(null);
+  };
 
-  // Search functionality
   const executeQuery = () => {
-    if (!layerName) {
-      toast.error("Please select a layer before searching.");
-      return;
-    }
     setLoading(true);
-    const result =
-      searchTerm.toLowerCase() === "all data"
-        ? data
-        : data.filter((f) =>
-            Object.values(f.attributes).some((val) =>
-              val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-            )
+    const result = searchTerm.toLowerCase() === "all data"
+      ? data
+      : data.filter((item) => {
+          return (
+            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.id.toString().includes(searchTerm) ||
+            item.uses.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.dimensions?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.latitude.toString().includes(searchTerm) ||
+            item.longitude.toString().includes(searchTerm) ||
+            item.geo.toLowerCase().includes(searchTerm.toLowerCase())
           );
+        });
+
     setFilteredData(result);
     setLoading(false);
-    toast.success(`Query run successfully. Rows found: ${result.length}`);
+    toast.success(`Query run successfully. Rows affected: ${result.length}.`);
   };
 
-  // Export functions
-  const exportToGeoJSON = () => {
-    if (!filteredData.length) {
-      toast.error("No data to export.");
-      return;
-    }
+  const handleViewMap = () => {
+    setShowMap(!showMap);
+  };
+
+  // Convert filtered data to GeoJSON
+  const convertToGeoJSON = () => {
     const geoJSON = {
       type: "FeatureCollection",
-      features: filteredData.map((f) => ({
+      features: filteredData.map(item => ({
         type: "Feature",
-        geometry: f.geometry,
-        properties: f.attributes,
+        geometry: {
+          type: "Point",
+          coordinates: [item.longitude, item.latitude],
+        },
+        properties: {
+          id: item.id,
+          name: item.name,
+          uses: item.uses,
+          dimensions: item.dimensions,
+          geo: item.geo,
+        },
       })),
     };
-    const blob = new Blob([JSON.stringify(geoJSON)], {
-      type: "application/json",
-    });
+
+    return geoJSON;
+  };
+
+  // Export function to download as GeoJSON
+  const exportToGeoJSON = () => {
+    const geoJSON = convertToGeoJSON();
+    const blob = new Blob([JSON.stringify(geoJSON)], { type: "application/json" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_data.geojson`;
+    a.download = "filteredData.geojson";
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
+  // Export function to download as CSV
   const exportToCSV = () => {
-    if (!filteredData.length) {
-      toast.error("No data to export.");
-      return;
-    }
-    const rows = filteredData.map((f) => f.attributes);
-    const csv = Papa.unparse(rows);
+    const csv = Papa.unparse(filteredData);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_data.csv`;
+    a.download = "filteredData.csv";
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
+  // Export function to download as XLSX
   const exportToXLSX = () => {
-    if (!filteredData.length) {
-      toast.error("No data to export.");
-      return;
-    }
-    const rows = filteredData.map((f) => f.attributes);
-    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const worksheet = XLSX.utils.json_to_sheet(filteredData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Spatial Data");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "FilteredData");
     const blob = XLSX.write(workbook, { bookType: "xlsx", type: "blob" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_data.xlsx`;
+    a.download = "filteredData.xlsx";
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
-  // Handle shape creation for filtering
-  const onCreated = (e) => {
-    const layer = e.layer;
-    let result = [];
-    if (layer instanceof L.Polygon) {
-      result = data.filter(
-        (f) =>
-          f.geometry?.type === "Point" &&
-          layer
-            .getBounds()
-            .contains([
-              f.geometry.coordinates[1],
-              f.geometry.coordinates[0],
-            ])
-      );
-    }
-    setFilteredData(result);
-    toast.info(`Filtered ${result.length} features inside drawn shape`);
-  };
-
   return (
-    <div className="container mx-auto my-8 px-4">
+    <div className="container mx-auto my-8">
       <ToastContainer />
-      <h1 className="text-3xl font-bold mb-6 text-center">Data View</h1>
-
-      {/* Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-3">
-        {/* Layer Selector Dropdown */}
-        <select
-          value={layerName}
-          onChange={(e) => setLayerName(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-1/4 focus:outline-none focus:ring focus:ring-blue-300"
+      <div className="flex justify-between items-center mb-6">
+        <button
+          onClick={() => navigate("addData")}
+          className="rounded bg-blue-600 text-white py-2 px-4 font-semibold hover:bg-blue-700 transition text-sm"
         >
-          <option value="" disabled>
-            Select a Layer
-          </option>
-          {availableLayers.map((layer) => (
-            <option key={layer.value} value={layer.value}>
-              {layer.label}
-            </option>
-          ))}
-        </select>
-
+          Add Data
+        </button>
         <input
           type="text"
           placeholder="Query data here..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="border border-gray-300 rounded px-4 py-2 w-full md:w-1/3 focus:outline-none focus:ring focus:ring-blue-300 text-sm"
+          className="border border-gray-300 rounded px-4 py-2 w-1/3 focus:outline-none focus:ring focus:ring-blue-300 text-sm"
         />
         <button
           onClick={executeQuery}
           className="rounded bg-green-600 text-white py-2 px-4 font-semibold hover:bg-green-700 transition text-sm"
-          disabled={!layerName || loading}
         >
-          {loading ? "Searching..." : "Search"}
+          View/Query Data
         </button>
         <button
-          onClick={() => setShowMap(!showMap)}
+          onClick={handleViewMap}
           className="rounded bg-yellow-600 text-white py-2 px-4 font-semibold hover:bg-yellow-700 transition text-sm"
-          disabled={!layerName}
         >
           View Map
         </button>
+        {/* Export Button for selecting file format */}
         <div className="relative inline-block text-left">
           <button
-            onClick={() => setShowExportMenu(!showExportMenu)}
             className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm"
-            disabled={!filteredData.length}
+            type="button"
           >
             Export
           </button>
-          {showExportMenu && (
-            <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
-              <div className="py-1">
-                <button
-                  onClick={exportToCSV}
-                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-                >
-                  Export as CSV
-                </button>
-                <button
-                  onClick={exportToGeoJSON}
-                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-                >
-                  Export as GeoJSON
-                </button>
-                <button
-                  onClick={exportToXLSX}
-                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-                >
-                  Export as XLSX
-                </button>
-              </div>
+          <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
+            <div className="py-1">
+              <button
+                onClick={exportToCSV}
+                className="text-gray-700 block px-4 py-2 text-sm"
+              >
+                Export as CSV
+              </button>
+              <button
+                onClick={exportToGeoJSON}
+                className="text-gray-700 block px-4 py-2 text-sm"
+              >
+                Export as GeoJSON
+              </button>
+              <button
+                onClick={exportToXLSX}
+                className="text-gray-700 block px-4 py-2 text-sm"
+              >
+                Export as XLSX
+              </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Data Table */}
-      {filteredData.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="table-auto border-collapse border border-gray-300 w-full text-sm">
-            <thead className="bg-gray-200">
+      <div className="overflow-x-auto shadow-lg rounded-lg border border-gray-200">
+        <table className="min-w-full bg-white text-sm">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="text-left font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">ID</th>
+              <th className="text-left font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Name</th>
+              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Use</th>
+              <th className="text-center font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Dimensions (height/width)</th>
+              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Latitude</th>
+              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Longitude</th>
+              <th className="text-right font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">GeoType</th>
+              <th className="text-center font-semibold text-gray-600 uppercase tracking-wider py-3 px-6">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
               <tr>
-                <th className="border border-gray-300 px-2 py-1">ID</th>
-                {filteredData[0] &&
-                  Object.keys(filteredData[0].attributes).map((col) => (
-                    <th key={col} className="border border-gray-300 px-2 py-1">
-                      {col}
-                    </th>
-                  ))}
+                <td colSpan="8" className="text-center py-6 text-gray-500 text-sm">
+                  Loading...
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-100">
-                  <td className="border border-gray-300 px-2 py-1">{row.id}</td>
-                  {Object.values(row.attributes).map((val, i) => (
-                    <td key={i} className="border border-gray-300 px-2 py-1">
-                      {val?.toString()}
-                    </td>
-                  ))}
+            ) : filteredData.length > 0 ? (
+              filteredData.map((item, index) => (
+                <tr
+                  key={item.id}
+                  className={`${index % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}
+                >
+                  <td className="text-left py-3 px-6 text-gray-700 text-sm">{item.id}</td>
+                  <td className="text-left py-3 px-6 text-gray-700 text-sm">{item.name}</td>
+                  <td className="text-right py-3 px-6 text-gray-700 text-sm">{item.uses}</td>
+                  <td className="text-center py-3 px-6 text-gray-700 text-sm">{item.dimensions}</td>
+                  <td className="text-right py-3 px-6 text-gray-700 text-sm">{item.latitude}</td>
+                  <td className="text-right py-3 px-6 text-gray-700 text-sm">{item.longitude}</td>
+                  <td className="text-right py-3 px-6 text-gray-700 text-sm">{item.geo}</td>
+                  <td className="text-center py-3 px-6">
+                    <button onClick={() => navigate(`/UpdateData/${item.id}`)} className="text-blue-600 hover:text-blue-800 px-2 text-sm">
+                      Update
+                    </button>
+                    <button
+                      onClick={() => confirmDelete(item.id)}
+                      className="text-red-600 hover:text-red-800 px-2 text-sm"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-center text-gray-500">
-          {layerName ? "No data available for this layer." : "Please select a layer."}
-        </p>
-      )}
+              ))
+            ) : (
+              <tr>
+                <td colSpan="8" className="text-center py-6 text-blue-500 text-sm">
+                  No data output. Execute a query to get output.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {/* Map Modal */}
       {showMap && (
         <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 md:w-4/5 h-4/5 relative">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-3/4 h-3/4">
             <button
-              onClick={() => setShowMap(false)}
+              onClick={handleViewMap}
               className="absolute top-4 right-4 text-white bg-gray-800 hover:bg-gray-600 rounded-full p-2"
             >
               X
             </button>
             <MapContainer
-              ref={mapRef}
               center={[0, 0]}
-              zoom={5}
+              zoom={8}
               style={{ width: "100%", height: "100%" }}
             >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <FeatureGroup>
-                <Suspense fallback={null}>
-                  <EditControl
-                    position="topright"
-                    onCreated={onCreated}
-                    draw={{
-                      rectangle: true,
-                      circle: false,
-                      circlemarker: false,
-                      marker: false,
-                      polygon: true,
-                      polyline: true,
-                    }}
-                  />
-                </Suspense>
-              </FeatureGroup>
-
-              {/* Render features */}
-              {filteredData.map((f, i) => {
-                if (f.geometry?.type === "Point") {
-                  return (
-                    <Marker
-                      key={i}
-                      position={[
-                        f.geometry.coordinates[1],
-                        f.geometry.coordinates[0],
-                      ]}
-                    >
-                      <Popup>
-                        {Object.entries(f.attributes).map(([k, v]) => (
-                          <div key={k}>
-                            <strong>{k}:</strong> {v?.toString()}
-                          </div>
-                        ))}
-                      </Popup>
-                    </Marker>
-                  );
-                } else if (f.geometry?.type === "Polygon") {
-                  return (
-                    <Polygon
-                      key={i}
-                      positions={f.geometry.coordinates[0].map((c) => [
-                        c[1],
-                        c[0],
-                      ])}
-                      color="blue"
-                    />
-                  );
-                } else if (f.geometry?.type === "LineString") {
-                  return (
-                    <Polyline
-                      key={i}
-                      positions={f.geometry.coordinates.map((c) => [c[1], c[0]])}
-                      color="red"
-                    />
-                  );
-                }
-                return null;
-              })}
+              {filteredData.map((item) => (
+                item.latitude && item.longitude ? (
+                  <Marker
+                    key={item.id}
+                    position={[item.latitude, item.longitude]}
+                    icon={new L.Icon({ iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png" })}
+                  >
+                    <Popup>
+                      <strong>{item.name}</strong><br />
+                      {item.dimensions}<br />
+                      Latitude: {item.latitude}<br />
+                      Longitude: {item.longitude}
+                    </Popup>
+                  </Marker>
+                ) : null
+              ))}
             </MapContainer>
           </div>
         </div>
       )}
     </div>
   );
-}
+};
 
 export default DataView;
