@@ -1,12 +1,10 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import * as XLSX from "xlsx";
-import Papa from "papaparse";
 
 // Fix Leaflet default icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -25,9 +23,6 @@ const DataView = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [showMap, setShowMap] = useState(false);
   const [layerName, setLayerName] = useState("buildings");
-  const [exportOpen, setExportOpen] = useState(false); // dropdown state
-
-  const exportRef = useRef(null);
 
   // Available datasets/layers
   const availableLayers = ["buildings", "roads", "water_supply", "security"];
@@ -48,19 +43,6 @@ const DataView = () => {
     };
     fetchData();
   }, [layerName]);
-
-  // Close export dropdown if clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (exportRef.current && !exportRef.current.contains(event.target)) {
-        setExportOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   const executeQuery = () => {
     setLoading(true);
@@ -84,56 +66,6 @@ const DataView = () => {
     toast.success(`Query run successfully. Rows affected: ${result.length}.`);
   };
 
-  const convertToGeoJSON = () => ({
-    type: "FeatureCollection",
-    features: filteredData.map((item) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [item.longitude, item.latitude] },
-      properties: {
-        id: item.id,
-        name: item.name,
-        uses: item.uses,
-        dimensions: item.dimensions,
-        geo: item.geo,
-      },
-    })),
-  });
-
-  const exportToGeoJSON = () => {
-    const geoJSON = convertToGeoJSON();
-    const blob = new Blob([JSON.stringify(geoJSON)], { type: "application/json" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${layerName}_data.geojson`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const exportToCSV = () => {
-    const csv = Papa.unparse(filteredData);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${layerName}_data.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const exportToXLSX = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "FilteredData");
-    const blob = XLSX.write(workbook, { bookType: "xlsx", type: "blob" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${layerName}_data.xlsx`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="container mx-auto my-8">
       <ToastContainer />
@@ -155,42 +87,6 @@ const DataView = () => {
         >
           View Map
         </button>
-
-        {/* Export Dropdown Button */}
-        <div className="relative inline-block text-left" ref={exportRef}>
-          <button
-            onClick={() => setExportOpen(!exportOpen)}
-            className="rounded bg-purple-600 text-white py-2 px-4 font-semibold hover:bg-purple-700 transition text-sm"
-            type="button"
-          >
-            Export
-          </button>
-
-          {exportOpen && (
-            <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
-              <div className="py-1">
-                <button
-                  onClick={() => { exportToCSV(); setExportOpen(false); }}
-                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-                >
-                  Export as CSV
-                </button>
-                <button
-                  onClick={() => { exportToGeoJSON(); setExportOpen(false); }}
-                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-                >
-                  Export as GeoJSON
-                </button>
-                <button
-                  onClick={() => { exportToXLSX(); setExportOpen(false); }}
-                  className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
-                >
-                  Export as XLSX
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Another Example Button */}
         <button
