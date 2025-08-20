@@ -1,4 +1,4 @@
-// src/pages/DatamanagementPage..jsx
+// src/pages/DatamanagementPage.jsx
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
@@ -49,7 +49,7 @@ const layersList = [
   { key: "recreational_areas", label: "Recreational Areas" },
 ];
 
-function DataView() {
+function DatamanagementPage() {
   const [dataMap, setDataMap] = useState({}); // { layerKey: data[] }
   const [filteredMap, setFilteredMap] = useState({}); // filtered per layer
   const [layerVisibility, setLayerVisibility] = useState({}); // { layerKey: boolean }
