@@ -37,7 +37,7 @@ const DataView = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const response = await DataServers.getData(layerName);
+        const response = await DataServers.getData(layerName); // replace with actual fetch
         setData(response.data);
         setFilteredData(response.data);
       } catch (error) {
@@ -201,7 +201,7 @@ const DataView = () => {
         </button>
       </div>
 
-      {/* EXISTING CONTROLS */}
+      {/* LAYER SELECT & SEARCH */}
       <div className="flex justify-between items-center mb-6 gap-2">
         <select
           value={layerName}
