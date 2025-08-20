@@ -1,4 +1,4 @@
-// src/pages/DataView.jsx
+// src/pages/DatamanagementPage..jsx
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
@@ -310,4 +310,4 @@ function DataView() {
   );
 }
 
-export default DataView;
+export default DatamanagementPage;
