@@ -14,7 +14,6 @@ import SystemDashboard from './pages/SystemDashboard';
 import AdminPanel from './pages/AdminPanel';
 import MapView from './pages/MapView';
 import DataManagement from './pages/DatamanagementPage.jsx';
-import DataView from './pages/DataView.jsx';
 import DataTable from './pages/DataTable.jsx'; // New DataTable page
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
@@ -63,7 +62,6 @@ function App() {
                 <Route path="/admin" element={<AdminPanel darkMode={darkMode} setDarkMode={setDarkMode} />} />
                 <Route path="/map" element={<MapView darkMode={darkMode} setDarkMode={setDarkMode} />} />
                 <Route path="/data" element={<DataManagement darkMode={darkMode} setDarkMode={setDarkMode} />} />
-                <Route path="/data-view" element={<DataView darkMode={darkMode} setDarkMode={setDarkMode} />} />
                 <Route path="/data-table" element={<DataTable darkMode={darkMode} setDarkMode={setDarkMode} />} />
               </Route>
             </Routes>
