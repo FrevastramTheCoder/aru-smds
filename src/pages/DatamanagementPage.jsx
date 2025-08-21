@@ -32,7 +32,6 @@ function DataManagement() {
   const API_BASE =
     import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Handle shapefile upload
   const handleFileUpload = useCallback(async () => {
     if (!file) {
       setError("Please select a file to upload.");
@@ -42,7 +41,7 @@ function DataManagement() {
     setUploadLoading(true);
     setError("");
     setUploadProgress(0);
-    setProgressColor("#3b82f6"); // reset to blue when starting
+    setProgressColor("#3b82f6");
 
     try {
       const formData = new FormData();
@@ -65,11 +64,11 @@ function DataManagement() {
         },
       });
 
-      setProgressColor("#22c55e"); // green when done
+      setProgressColor("#22c55e");
       setFile(null);
       alert("✅ Shapefile uploaded successfully!");
     } catch (err) {
-      setProgressColor("#dc2626"); // red on error
+      setProgressColor("#dc2626");
       if (err.response?.status === 404) {
         setError("Upload endpoint not found. Please check server config.");
       } else if (err.response?.status === 401) {
@@ -84,41 +83,134 @@ function DataManagement() {
     }
   }, [file, dataType, API_BASE]);
 
-  if (authLoading) return <div className="p-4">Loading authentication...</div>;
+  if (authLoading)
+    return (
+      <div style={{ padding: 20, fontSize: 16, color: "#555" }}>
+        Loading authentication...
+      </div>
+    );
+
   if (!isAuthenticated)
     return (
-      <div className="p-4 text-red-500 font-semibold">
+      <div
+        style={{
+          padding: 20,
+          fontSize: 16,
+          fontWeight: "bold",
+          color: "#dc2626",
+        }}
+      >
         Please log in to upload shapefiles.
       </div>
     );
 
+  const containerStyle = {
+    maxWidth: 800,
+    margin: "40px auto",
+    padding: 20,
+    fontFamily: "Arial, sans-serif",
+  };
+
+  const cardStyle = {
+    backgroundColor: "#ffffff",
+    padding: 30,
+    borderRadius: 12,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+    border: "1px solid #e5e7eb",
+  };
+
+  const titleStyle = {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#1f2937",
+  };
+
+  const labelStyle = {
+    display: "block",
+    marginBottom: 8,
+    fontWeight: "600",
+    color: "#374151",
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid #d1d5db",
+    marginBottom: 20,
+    fontSize: 14,
+  };
+
+  const buttonStyle = (bgColor, hoverColor) => ({
+    backgroundColor: bgColor,
+    color: "#fff",
+    padding: "10px 16px",
+    borderRadius: 8,
+    fontWeight: "600",
+    border: "none",
+    cursor: "pointer",
+    marginRight: 10,
+    transition: "all 0.2s",
+    minWidth: 120,
+    textAlign: "center",
+  });
+
+  const progressContainerStyle = {
+    backgroundColor: "#e5e7eb",
+    borderRadius: 8,
+    height: 16,
+    marginTop: 10,
+    overflow: "hidden",
+  };
+
+  const progressBarStyle = {
+    height: "100%",
+    width: `${uploadProgress}%`,
+    backgroundColor: progressColor,
+    transition: "width 0.3s ease",
+  };
+
   return (
-    <div className="page-container">
-      {/* Top Navigation Buttons */}
-      <div className="nav-buttons">
-        <button className="btn btn-green" onClick={() => navigate("/data-view")}>
+    <div style={containerStyle}>
+      {/* Navigation Buttons */}
+      <div style={{ marginBottom: 30 }}>
+        <button
+          style={buttonStyle("#22c55e", "#16a34a")}
+          onClick={() => navigate("/data-view")}
+        >
           Data View
         </button>
-        <button className="btn btn-blue" onClick={() => navigate("/map")}>
+        <button
+          style={buttonStyle("#3b82f6", "#2563eb")}
+          onClick={() => navigate("/map")}
+        >
           Map View
         </button>
-        <button className="btn btn-purple" disabled>
+        <button style={buttonStyle("#8b5cf6", "#7c3aed")} disabled>
           Upload Shapefile
         </button>
       </div>
 
       {/* Upload Card */}
-      <div className="card">
-        <h1 className="title">📂 Upload Shapefile</h1>
+      <div style={cardStyle}>
+        <h1 style={titleStyle}>📂 Upload Shapefile</h1>
 
-        {error && <p className="error-text">{error}</p>}
+        {error && (
+          <p style={{ color: "#dc2626", marginBottom: 20, fontWeight: "bold" }}>
+            {error}
+          </p>
+        )}
 
-        <div className="form-group">
-          <label htmlFor="dataType">Select Data Type</label>
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle} htmlFor="dataType">
+            Select Data Type
+          </label>
           <select
             id="dataType"
             value={dataType}
             onChange={(e) => setDataType(e.target.value)}
+            style={inputStyle}
           >
             {dataTypes.map(({ key, label }) => (
               <option key={key} value={key}>
@@ -128,36 +220,33 @@ function DataManagement() {
           </select>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="fileUpload">Select Shapefile (.zip)</label>
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle} htmlFor="fileUpload">
+            Select Shapefile (.zip)
+          </label>
           <input
             type="file"
             id="fileUpload"
             accept=".zip"
             onChange={(e) => setFile(e.target.files[0])}
+            style={inputStyle}
           />
         </div>
 
         <button
           onClick={handleFileUpload}
           disabled={uploadLoading || !file}
-          className="btn btn-blue full-width"
+          style={buttonStyle("#3b82f6", "#2563eb")}
         >
           {uploadLoading ? `Uploading... ${uploadProgress}%` : "Upload"}
         </button>
 
         {/* Progress Bar */}
-        {uploadLoading || uploadProgress > 0 ? (
-          <div className="progress-bar-container">
-            <div
-              className="progress-bar"
-              style={{
-                width: `${uploadProgress}%`,
-                background: progressColor,
-              }}
-            ></div>
+        {(uploadLoading || uploadProgress > 0) && (
+          <div style={progressContainerStyle}>
+            <div style={progressBarStyle}></div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
