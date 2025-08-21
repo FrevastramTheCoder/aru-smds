@@ -755,7 +755,6 @@
 // }
 
 // export default DataManagement;
-
 // src/pages/DataManagement.jsx
 import React, { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -772,6 +771,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import * as shp from "shpjs";
+import * as toGeoJSON from "@mapbox/togeojson";
 
 // Map Legend Component
 function MapLegend({ layers }) {
@@ -872,7 +873,7 @@ function DataManagement() {
     setTimeout(() => fitGeoJSONBounds(geojson), 0);
   };
 
-  // ---------- Remove Layer ----------
+  // Remove Layer
   const handleRemoveLayer = (id) => {
     const updated = layers.filter((l) => l.id !== id);
     setLayers(updated);
@@ -886,7 +887,7 @@ function DataManagement() {
     toast.info("Cleared all layers.");
   };
 
-  // ---------- File Upload ----------
+  // Upload for Local Storage Only
   const handleUploadClick = () =>
     document.getElementById("fileInputHidden")?.click();
 
@@ -894,38 +895,32 @@ function DataManagement() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const token = localStorage.getItem("token");
-    if (!token) return toast.error("Please login to upload.");
-
     for (const file of files) {
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("tableName", dataType);
+        let geojson = null;
+        if (file.name.endsWith(".zip")) {
+          geojson = await shp(file);
+        } else if (file.name.endsWith(".kml")) {
+          const text = await file.text();
+          const parser = new DOMParser();
+          const kml = parser.parseFromString(text, "text/xml");
+          geojson = toGeoJSON.kml(kml);
+        } else {
+          toast.error(`Unsupported file type: ${file.name}`);
+          continue;
+        }
 
-        const res = await axios.post(`${API_BASE}/upload`, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (res.data?.success) {
-          toast.success(`Uploaded ${file.name}: ${res.data.inserted} features`);
-          const geoRes = await axios.get(`${API_BASE}/geojson/${dataType}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          addLayer(file.name, geoRes.data);
-        } else toast.error(`Upload failed: ${res.data?.error || "Unknown error"}`);
+        addLayer(file.name, geojson);
+        toast.success(`Loaded ${file.name}`);
       } catch (err) {
         console.error(err);
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`Failed to load ${file.name}`);
       }
     }
     e.target.value = "";
   };
 
-  // ---------- Save All Layers ----------
+  // Save all layers to database
   const handleSaveAllLayers = async () => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Please login to save layers.");
@@ -934,7 +929,11 @@ function DataManagement() {
       try {
         const formData = new FormData();
         formData.append("tableName", layer.type);
-        formData.append("file", new Blob([JSON.stringify(layer.data)], { type: "application/json" }), `${layer.name}.geojson`);
+        formData.append(
+          "file",
+          new Blob([JSON.stringify(layer.data)], { type: "application/json" }),
+          `${layer.name}.geojson`
+        );
 
         const res = await axios.post(`${API_BASE}/upload`, formData, {
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
@@ -949,7 +948,7 @@ function DataManagement() {
     }
   };
 
-  // Restore from LocalStorage
+  // Restore layers from localStorage
   useEffect(() => {
     const storedLayers = localStorage.getItem("dm_layers");
     if (storedLayers) {
@@ -980,18 +979,21 @@ function DataManagement() {
   return (
     <div style={containerStyle}>
       <ToastContainer position="top-right" autoClose={2600} />
+
       <div style={leftPanelStyle}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>📂 Upload Shapefile / KML</h1>
         <label>Select Data Type</label>
         <select style={selectStyle} value={dataType} onChange={(e) => setDataType(e.target.value)}>
           {dataTypes.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
         </select>
+
         <div style={fileBoxStyle}>
           <input id="fileInputHidden" type="file" accept=".zip,.kml" multiple onChange={handleFilesChosen} style={{ display: "none" }} />
           <button style={btnYellow} onClick={handleUploadClick}>Upload</button>
           <button style={btnGreen} onClick={handleSaveAllLayers}>Save</button>
           <button style={btnRed} onClick={handleClear}>Clear</button>
           <button style={{ ...btnGray, marginLeft: 10 }} onClick={fitAllLayers}>Fit All</button>
+
           {layers.length > 0 && (
             <div style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{layers.length} layer(s) loaded:</div>
@@ -1007,6 +1009,7 @@ function DataManagement() {
           )}
         </div>
       </div>
+
       <div style={rightPanelStyle}>
         <MapContainer whenCreated={(map) => (mapRef.current = map)} center={[-6.162, 35.7516]} zoom={12} style={{ height: "100%", width: "100%" }}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap contributors" />
