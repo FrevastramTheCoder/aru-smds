@@ -1029,6 +1029,7 @@
 // }
 
 // export default DataManagement;
+// src/pages/DataManagement.jsx
 import React, { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -1042,8 +1043,6 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import * as shp from "shpjs";
-import * as toGeoJSON from "@mapbox/togeojson";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -1073,7 +1072,6 @@ function MapLegend({ layers }) {
 
 function DataManagement() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const navigate = useNavigate();
   const mapRef = useRef(null);
 
   const [dataType, setDataType] = useState("buildings");
@@ -1098,7 +1096,6 @@ function DataManagement() {
   const API_BASE =
     import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Styles
   const getLayerStyle = (name, type) => {
     const styles = {
       aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
@@ -1175,7 +1172,7 @@ function DataManagement() {
     for (const file of files) {
       try {
         const formData = new FormData();
-        formData.append("shapefile", file);
+        formData.append("file", file); // note: backend expects 'file'
         formData.append("tableName", dataType);
 
         const res = await axios.post(`${API_BASE}/upload`, formData, {
@@ -1201,26 +1198,6 @@ function DataManagement() {
     e.target.value = "";
   };
 
-  const handleSave = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return toast.error("Please login to save layers.");
-
-    for (const layer of layers) {
-      try {
-        const res = await axios.post(
-          `${API_BASE}/save-geojson`,
-          { tableName: layer.type, geojson: layer.data },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (res.data?.success) toast.success(`Saved layer: ${layer.name}`);
-        else toast.error(`Failed to save layer: ${layer.name}`);
-      } catch (err) {
-        console.error(err);
-        toast.error(`Failed to save layer: ${layer.name}`);
-      }
-    }
-  };
-
   // Restore from LocalStorage
   useEffect(() => {
     const storedLayers = localStorage.getItem("dm_layers");
@@ -1236,7 +1213,8 @@ function DataManagement() {
   }, []);
 
   if (authLoading) return <div style={{ padding: 20 }}>Loading authentication...</div>;
-  if (!isAuthenticated) return <div style={{ padding: 20, color: "#dc2626" }}>Please log in.</div>;
+  if (!isAuthenticated)
+    return <div style={{ padding: 20, color: "#dc2626" }}>Please log in.</div>;
 
   const containerStyle = { display: "flex", gap: 20, maxWidth: 1200, margin: "40px auto" };
   const leftPanelStyle = { flex: 1, backgroundColor: "#fff", padding: 30, borderRadius: 12, boxShadow: "0 10px 25px rgba(0,0,0,0.08)" };
@@ -1252,21 +1230,18 @@ function DataManagement() {
   return (
     <div style={containerStyle}>
       <ToastContainer position="top-right" autoClose={2600} />
-
       <div style={leftPanelStyle}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>📂 Upload Shapefile / KML</h1>
         <label>Select Data Type</label>
         <select style={selectStyle} value={dataType} onChange={(e) => setDataType(e.target.value)}>
           {dataTypes.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
         </select>
-
         <div style={fileBoxStyle}>
           <input id="fileInputHidden" type="file" accept=".zip,.kml" multiple onChange={handleFilesChosen} style={{ display: "none" }} />
           <button style={btnYellow} onClick={handleUploadClick}>Upload</button>
-          <button style={btnGreen} onClick={handleSave}>Save</button>
+          <button style={btnGreen} onClick={handleUploadClick}>Save</button>
           <button style={btnRed} onClick={handleClear}>Clear</button>
           <button style={{ ...btnGray, marginLeft: 10 }} onClick={fitAllLayers}>Fit All</button>
-
           {layers.length > 0 && (
             <div style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{layers.length} layer(s) loaded:</div>
