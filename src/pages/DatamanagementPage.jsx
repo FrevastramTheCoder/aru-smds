@@ -2,6 +2,9 @@ import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import * as shp from "shpjs"; // library to parse shapefile .zip
 
 function DataManagement() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -12,7 +15,8 @@ function DataManagement() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
-  const [progressColor, setProgressColor] = useState("#3b82f6"); // default blue
+  const [progressColor, setProgressColor] = useState("#3b82f6");
+  const [previewGeoJSON, setPreviewGeoJSON] = useState(null);
 
   const dataTypes = [
     { key: "buildings", label: "Buildings" },
@@ -31,6 +35,22 @@ function DataManagement() {
 
   const API_BASE =
     import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
+
+  const handleFileSelect = async (e) => {
+    const selectedFile = e.target.files[0];
+    setFile(selectedFile);
+    setError("");
+    if (selectedFile && selectedFile.name.endsWith(".zip")) {
+      try {
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const geojson = await shp(arrayBuffer);
+        setPreviewGeoJSON(geojson);
+      } catch (err) {
+        setError("❌ Failed to parse shapefile. Ensure it is valid.");
+        console.error(err);
+      }
+    }
+  };
 
   const handleFileUpload = useCallback(async () => {
     if (!file) {
@@ -105,13 +125,15 @@ function DataManagement() {
     );
 
   const containerStyle = {
-    maxWidth: 800,
+    display: "flex",
+    gap: 20,
+    maxWidth: "1200px",
     margin: "40px auto",
-    padding: 20,
     fontFamily: "Arial, sans-serif",
   };
 
-  const cardStyle = {
+  const leftPanelStyle = {
+    flex: 1,
     backgroundColor: "#ffffff",
     padding: 30,
     borderRadius: 12,
@@ -119,11 +141,12 @@ function DataManagement() {
     border: "1px solid #e5e7eb",
   };
 
-  const titleStyle = {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#1f2937",
+  const rightPanelStyle = {
+    flex: 1,
+    height: "600px",
+    borderRadius: 12,
+    overflow: "hidden",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
   };
 
   const labelStyle = {
@@ -142,7 +165,7 @@ function DataManagement() {
     fontSize: 14,
   };
 
-  const buttonStyle = (bgColor, hoverColor) => ({
+  const buttonStyle = (bgColor) => ({
     backgroundColor: bgColor,
     color: "#fff",
     padding: "10px 16px",
@@ -151,50 +174,16 @@ function DataManagement() {
     border: "none",
     cursor: "pointer",
     marginRight: 10,
-    transition: "all 0.2s",
     minWidth: 120,
-    textAlign: "center",
   });
-
-  const progressContainerStyle = {
-    backgroundColor: "#e5e7eb",
-    borderRadius: 8,
-    height: 16,
-    marginTop: 10,
-    overflow: "hidden",
-  };
-
-  const progressBarStyle = {
-    height: "100%",
-    width: `${uploadProgress}%`,
-    backgroundColor: progressColor,
-    transition: "width 0.3s ease",
-  };
 
   return (
     <div style={containerStyle}>
-      {/* Navigation Buttons */}
-      <div style={{ marginBottom: 30 }}>
-        <button
-          style={buttonStyle("#22c55e", "#16a34a")}
-          onClick={() => navigate("/data-view")}
-        >
-          Data View
-        </button>
-        <button
-          style={buttonStyle("#3b82f6", "#2563eb")}
-          onClick={() => navigate("/map")}
-        >
-          Map View
-        </button>
-        <button style={buttonStyle("#8b5cf6", "#7c3aed")} disabled>
-          Upload Shapefile
-        </button>
-      </div>
-
-      {/* Upload Card */}
-      <div style={cardStyle}>
-        <h1 style={titleStyle}>📂 Upload Shapefile</h1>
+      {/* Left Upload Form */}
+      <div style={leftPanelStyle}>
+        <h1 style={{ fontSize: 24, fontWeight: "bold", marginBottom: 20 }}>
+          📂 Upload Shapefile
+        </h1>
 
         {error && (
           <p style={{ color: "#dc2626", marginBottom: 20, fontWeight: "bold" }}>
@@ -228,7 +217,7 @@ function DataManagement() {
             type="file"
             id="fileUpload"
             accept=".zip"
-            onChange={(e) => setFile(e.target.files[0])}
+            onChange={handleFileSelect}
             style={inputStyle}
           />
         </div>
@@ -236,17 +225,44 @@ function DataManagement() {
         <button
           onClick={handleFileUpload}
           disabled={uploadLoading || !file}
-          style={buttonStyle("#3b82f6", "#2563eb")}
+          style={buttonStyle("#3b82f6")}
         >
           {uploadLoading ? `Uploading... ${uploadProgress}%` : "Upload"}
         </button>
 
         {/* Progress Bar */}
         {(uploadLoading || uploadProgress > 0) && (
-          <div style={progressContainerStyle}>
-            <div style={progressBarStyle}></div>
+          <div
+            style={{
+              backgroundColor: "#e5e7eb",
+              borderRadius: 8,
+              height: 16,
+              marginTop: 10,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${uploadProgress}%`,
+                backgroundColor: progressColor,
+                transition: "width 0.3s ease",
+              }}
+            ></div>
           </div>
         )}
+      </div>
+
+      {/* Right Map Preview */}
+      <div style={rightPanelStyle}>
+        <MapContainer
+          center={[0, 0]}
+          zoom={2}
+          style={{ height: "100%", width: "100%" }}
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {previewGeoJSON && <GeoJSON data={previewGeoJSON} />}
+        </MapContainer>
       </div>
     </div>
   );
