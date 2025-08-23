@@ -1,51 +1,38 @@
-
-import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
-
-function BoundsListener({ onBoundsChange }) {
-  const map = useMap();
-
-  useEffect(() => {
-    // Only run when the map is fully initialized
-    map.whenReady(() => {
-      const updateBounds = () => {
-        try {
-          const bounds = map.getBounds();
-          onBoundsChange(bounds);
-        } catch (err) {
-          console.warn('Bounds callback skipped due to uninitialized map:', err);
-        }
-      };
-
-      // Initial invocation, once the map is ready
-      updateBounds();
-
-      // Listen for move/end events (panning, zooming)
-      map.on('moveend', updateBounds);
-
-      // Clean up the listener when unmounted
-      return () => {
-        map.off('moveend', updateBounds);
-      };
-    });
-  }, [map, onBoundsChange]);
-
-  return null;
-}
+import React, { useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 export default function MapComponent({ spatialData, initialCenter, onBoundsChange }) {
+  const mapRef = useRef();
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const handler = () => {
+      if (onBoundsChange) onBoundsChange(map.getBounds());
+    };
+    map.on('moveend', handler);
+    return () => map.off('moveend', handler);
+  }, [onBoundsChange]);
+
+  const getStyle = (feature) => ({
+    color: '#007bff',
+    weight: 2,
+    fillColor: '#007bff',
+    fillOpacity: 0.3,
+  });
+
   return (
-    <MapContainer center={initialCenter} zoom={13} style={{ height: '500px', width: '100%' }}>
-      <TileLayer
-        attribution="&copy; OpenStreetMap contributors"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-
-      {/* Safely listen for bounds changes once map is ready */}
-      <BoundsListener onBoundsChange={onBoundsChange} />
-
-      {/* Render spatial data here, e.g., GeoJSON layers */}
-      {/* Example: <GeoJSON data={spatialData} /> */}
+    <MapContainer
+      center={initialCenter}
+      zoom={16}
+      style={{ height: '100%', width: '100%' }}
+      whenCreated={(map) => (mapRef.current = map)}
+    >
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      {spatialData.length > 0 && (
+        <GeoJSON data={spatialData} style={getStyle} />
+      )}
     </MapContainer>
   );
 }
