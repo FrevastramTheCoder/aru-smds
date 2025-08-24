@@ -3683,7 +3683,7 @@ function MapView() {
           <div style={{ 
             padding: '10px', 
             backgroundColor: '#ffebee', 
-            border: '1px solid '#f44336', 
+            border: '1px solid #f44336', 
             borderRadius: '4px', 
             margin: '10px 0' 
           }}>
