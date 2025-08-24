@@ -1872,6 +1872,859 @@
 // }
 
 // export default MapView;
+// // MapView.js
+// import React, { useEffect, useRef, useState, useCallback } from 'react';
+// import { useLocation, useNavigate } from 'react-router-dom';
+// import axios from 'axios';
+// import MapComponent from '../components/MapComponent';
+
+// // ------------------------
+// // Debounce helper
+// // ------------------------
+// function debounce(fn, wait) {
+//   let t;
+//   return (...args) => {
+//     clearTimeout(t);
+//     t = setTimeout(() => fn(...args), wait);
+//   };
+// }
+
+// // ------------------------
+// // Retry fetch helper with exponential backoff
+// // ------------------------
+// const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+//   for (let i = 0; i < maxRetries; i++) {
+//     try {
+//       const controller = new AbortController();
+//       const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+//       const response = await axios({
+//         ...options,
+//         url,
+//         signal: controller.signal,
+//       });
+      
+//       clearTimeout(timeoutId);
+//       return response;
+//     } catch (error) {
+//       if (i === maxRetries - 1) throw error;
+//       console.warn(`Attempt ${i + 1} failed, retrying...`);
+//       await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+//     }
+//   }
+// };
+
+// // ------------------------
+// // Token validation helper
+// // ------------------------
+// const checkTokenValidity = (token) => {
+//   if (!token) return false;
+  
+//   try {
+//     const payload = JSON.parse(atob(token.split('.')[1]));
+//     const isExpired = payload.exp * 1000 < Date.now();
+//     return !isExpired;
+//   } catch {
+//     return false;
+//   }
+// };
+
+// // ------------------------
+// // Geometry simplification prevention
+// // ------------------------
+// const preventGeometryDistortion = (features, zoomLevel) => {
+//   // For high zoom levels, return original features to prevent distortion
+//   if (zoomLevel > 15) {
+//     return features;
+//   }
+
+//   // For lower zoom levels, use a more conservative simplification
+//   return features.map(feature => {
+//     if (!feature.geometry) return feature;
+    
+//     // Only simplify complex geometries to prevent distortion
+//     const geometry = { ...feature.geometry };
+    
+//     if (geometry.type === 'LineString' && geometry.coordinates && geometry.coordinates.length > 100) {
+//       // Simple simplification - keep every 3rd point for lines
+//       geometry.coordinates = geometry.coordinates.filter((_, index) => index % 3 === 0);
+//     }
+//     else if (geometry.type === 'Polygon' && geometry.coordinates) {
+//       // For polygons, be very conservative with simplification
+//       geometry.coordinates = geometry.coordinates.map(ring => {
+//         if (ring.length > 50) {
+//           return ring.filter((_, index) => index % 2 === 0);
+//         }
+//         return ring;
+//       });
+//     }
+    
+//     return {
+//       ...feature,
+//       geometry
+//     };
+//   });
+// };
+
+// // ------------------------
+// // Calculate appropriate simplification based on zoom level
+// // ------------------------
+// const getSimplificationFactor = (zoomLevel) => {
+//   // Return 0 for no simplification at higher zoom levels to prevent distortion
+//   if (zoomLevel > 16) return 0; // No simplification
+//   if (zoomLevel > 14) return 0.00001; // Minimal simplification
+//   if (zoomLevel > 12) return 0.00005; // Moderate simplification
+//   if (zoomLevel > 10) return 0.0001; // More simplification
+//   return 0.0002; // Maximum simplification for very low zoom
+// };
+
+// // ------------------------
+// // Local storage helper for caching
+// // ------------------------
+// const useLocalStorageCache = (key, ttl = 3600000) => {
+//   const get = useCallback(() => {
+//     try {
+//       const item = localStorage.getItem(key);
+//       if (!item) return null;
+      
+//       const { value, timestamp } = JSON.parse(item);
+//       if (Date.now() - timestamp > ttl) {
+//         localStorage.removeItem(key);
+//         return null;
+//       }
+//       return value;
+//     } catch {
+//       return null;
+//     }
+//   }, [key, ttl]);
+
+//   const set = useCallback((value) => {
+//     try {
+//       const item = JSON.stringify({
+//         value,
+//         timestamp: Date.now()
+//       });
+//       localStorage.setItem(key, item);
+//     } catch (error) {
+//       console.warn('Could not save to localStorage:', error);
+//     }
+//   }, [key]);
+
+//   return { get, set };
+// };
+
+// // ------------------------
+// // MapView Page
+// // ------------------------
+// function MapView() {
+//   const [spatialData, setSpatialData] = useState({});
+//   const [selectedType, setSelectedType] = useState('buildings');
+//   const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
+//   const [error, setError] = useState('');
+//   const [loading, setLoading] = useState(false);
+//   const [loadingLayers, setLoadingLayers] = useState(new Set());
+//   const [mapStats, setMapStats] = useState({});
+//   const [searchQuery, setSearchQuery] = useState('');
+//   const [filteredFeatures, setFilteredFeatures] = useState({});
+//   const [showFilters, setShowFilters] = useState(false);
+//   const [activeFilters, setActiveFilters] = useState({});
+//   const [exportProgress, setExportProgress] = useState(0);
+//   const [isExporting, setIsExporting] = useState(false);
+//   const [currentZoom, setCurrentZoom] = useState(15);
+//   const [simplificationEnabled, setSimplificationEnabled] = useState(true);
+//   const [dataQuality, setDataQuality] = useState('balanced');
+  
+//   const location = useLocation();
+//   const navigate = useNavigate();
+
+//   // Cache implementation
+//   const spatialCache = useLocalStorageCache('spatial-data-cache', 86400000);
+//   const spatialDataCache = useRef(new Map());
+//   const lastBoundsKeyRef = useRef(null);
+//   const lastZoomRef = useRef(currentZoom);
+
+//   const categoryToTypeMap = {
+//     buildings: 'buildings',
+//     roads: 'roads',
+//     footpaths: 'footpaths',
+//     vegetation: 'vegetation',
+//     parking: 'parking',
+//     'solid-waste': 'solid_waste',
+//     electricity: 'electricity',
+//     'water-supply': 'water_supply',
+//     'drainage-system': 'drainage',
+//     vimbweta: 'vimbweta',
+//     'security-lights': 'security',
+//     'recreational-areas': 'recreational_areas',
+//     'aru-boundary': 'aru_boundary'
+//   };
+
+//   const dataTypes = [
+//     { key: 'buildings', label: 'Buildings', hasProperties: true },
+//     { key: 'roads', label: 'Roads', hasProperties: true },
+//     { key: 'footpaths', label: 'Footpaths', hasProperties: true },
+//     { key: 'vegetation', label: 'Vegetation', hasProperties: true },
+//     { key: 'parking', label: 'Parking', hasProperties: true },
+//     { key: 'solid_waste', label: 'Solid Waste', hasProperties: true },
+//     { key: 'electricity', label: 'Electricity', hasProperties: true },
+//     { key: 'water_supply', label: 'Water Supply', hasProperties: true },
+//     { key: 'drainage', label: 'Drainage System', hasProperties: true },
+//     { key: 'vimbweta', label: 'Vimbweta', hasProperties: true },
+//     { key: 'security', label: 'Security Lights', hasProperties: true },
+//     { key: 'recreational_areas', label: 'Recreational Areas', hasProperties: true },
+//     { key: 'aru_boundary', label: 'ARU Boundary', hasProperties: false }
+//   ];
+
+//   const layerColors = {
+//     buildings: '#ff5733',
+//     roads: '#2e86de',
+//     footpaths: '#28b463',
+//     vegetation: '#27ae60',
+//     parking: '#f1c40f',
+//     solid_waste: '#8e44ad',
+//     electricity: '#e67e22',
+//     water_supply: '#3498db',
+//     drainage: '#16a085',
+//     vimbweta: '#d35400',
+//     security: '#c0392b',
+//     recreational_areas: '#7f8c8d',
+//     aru_boundary: '#000000'
+//   };
+
+//   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+
+//   // ------------------------
+//   // Check authentication on component mount
+//   // ------------------------
+//   useEffect(() => {
+//     const token = localStorage.getItem('token');
+    
+//     if (!token) {
+//       setError('No authentication token found. Please login again.');
+//       navigate('/login');
+//       return;
+//     }
+    
+//     if (!checkTokenValidity(token)) {
+//       setError('Session expired. Please login again.');
+//       localStorage.removeItem('token');
+//       navigate('/login');
+//       return;
+//     }
+
+//     // Load cached data on mount
+//     const cachedData = spatialCache.get();
+//     if (cachedData) {
+//       setSpatialData(cachedData);
+//     }
+//   }, [navigate, spatialCache]);
+
+//   // ------------------------
+//   // Initialize layer from URL query
+//   // ------------------------
+//   useEffect(() => {
+//     const params = new URLSearchParams(location.search);
+//     const category = params.get('category');
+//     const type = category ? (categoryToTypeMap[category] || 'buildings') : 'buildings';
+//     setSelectedType(type);
+//     setSelectedLayers(new Set([type]));
+//   }, [location]);
+
+//   // ------------------------
+//   // Calculate map statistics
+//   // ------------------------
+//   useEffect(() => {
+//     const stats = {};
+//     Object.entries(spatialData).forEach(([layer, features]) => {
+//       stats[layer] = {
+//         count: features.length,
+//         properties: features.reduce((acc, feature) => {
+//           if (feature.properties) {
+//             Object.entries(feature.properties).forEach(([key, value]) => {
+//               if (!acc[key]) acc[key] = new Set();
+//               if (value !== null && value !== undefined) {
+//                 acc[key].add(value.toString());
+//               }
+//             });
+//           }
+//           return acc;
+//         }, {})
+//       };
+//     });
+//     setMapStats(stats);
+//   }, [spatialData]);
+
+//   // ------------------------
+//   // Apply search filter
+//   // ------------------------
+//   useEffect(() => {
+//     if (!searchQuery) {
+//       setFilteredFeatures({});
+//       return;
+//     }
+
+//     const filtered = {};
+//     Object.entries(spatialData).forEach(([layer, features]) => {
+//       filtered[layer] = features.filter(feature => 
+//         feature.properties && 
+//         Object.values(feature.properties).some(value => 
+//           value && value.toString().toLowerCase().includes(searchQuery.toLowerCase())
+//         )
+//       );
+//     });
+//     setFilteredFeatures(filtered);
+//   }, [searchQuery, spatialData]);
+
+//   // ------------------------
+//   // Apply property filters
+//   // ------------------------
+//   useEffect(() => {
+//     if (Object.keys(activeFilters).length === 0) {
+//       setFilteredFeatures({});
+//       return;
+//     }
+
+//     const filtered = {};
+//     Object.entries(spatialData).forEach(([layer, features]) => {
+//       filtered[layer] = features.filter(feature => {
+//         if (!feature.properties) return false;
+        
+//         return Object.entries(activeFilters).every(([key, values]) => {
+//           if (!feature.properties[key]) return false;
+//           return values.includes(feature.properties[key].toString());
+//         });
+//       });
+//     });
+//     setFilteredFeatures(filtered);
+//   }, [activeFilters, spatialData]);
+
+//   // ------------------------
+//   // Fetch GeoJSON by bounding box for multiple layers
+//   // ------------------------
+//   const fetchGeoByBbox = useCallback(
+//     debounce(async (layers, bounds, zoomLevel) => {
+//       if (!layers || layers.size === 0 || !bounds) return;
+      
+//       const token = localStorage.getItem('token');
+//       if (!token || !checkTokenValidity(token)) {
+//         setError('Session expired. Please login again.');
+//         localStorage.removeItem('token');
+//         navigate('/login');
+//         return;
+//       }
+
+//       const key = `${Array.from(layers).join('-')}-${bounds.getWest().toFixed(6)}-${bounds.getSouth().toFixed(6)}-${bounds.getEast().toFixed(6)}-${bounds.getNorth().toFixed(6)}-${zoomLevel}`;
+//       if (lastBoundsKeyRef.current === key) return;
+//       lastBoundsKeyRef.current = key;
+
+//       try {
+//         setLoading(true);
+//         setError('');
+//         setLoadingLayers(prev => new Set([...prev, ...layers]));
+
+//         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+//         const newSpatialData = { ...spatialData };
+
+//         // Determine simplification factor based on zoom level and quality setting
+//         let simplify = 0;
+//         if (simplificationEnabled) {
+//           simplify = getSimplificationFactor(zoomLevel);
+          
+//           // Adjust based on quality preference
+//           if (dataQuality === 'high') {
+//             simplify *= 0.5; // Less simplification for high quality
+//           } else if (dataQuality === 'performance') {
+//             simplify *= 2; // More simplification for performance
+//           }
+//         }
+
+//         for (const layer of layers) {
+//           try {
+//             const cacheKey = `${layer}-${bbox}-${simplify}-${zoomLevel}`;
+//             if (spatialDataCache.current.has(cacheKey)) {
+//               newSpatialData[layer] = spatialDataCache.current.get(cacheKey);
+//               continue;
+//             }
+
+//             const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
+//             const resp = await fetchWithRetry(url, {
+//               headers: { 
+//                 'Authorization': `Bearer ${token}`,
+//                 'Content-Type': 'application/json'
+//               },
+//               params: { 
+//                 bbox, 
+//                 simplify: simplificationEnabled ? simplify : 0
+//               },
+//             }, 2, 45000);
+
+//             let fc = resp.data || { type: 'FeatureCollection', features: [] };
+//             let features = Array.isArray(fc.features) ? fc.features : [];
+            
+//             // Apply client-side geometry protection to prevent distortion
+//             features = preventGeometryDistortion(features, zoomLevel);
+            
+//             newSpatialData[layer] = features;
+//             spatialDataCache.current.set(cacheKey, features);
+//           } catch (err) {
+//             console.error(`Error fetching geojson for ${layer}:`, err);
+//             newSpatialData[layer] = [];
+            
+//             if (err.response?.status === 401) {
+//               setError('Authentication failed. Please login again.');
+//               localStorage.removeItem('token');
+//               navigate('/login');
+//               break;
+//             } else if (err.response?.status === 404) {
+//               console.warn(`Layer "${layer}" not found on server.`);
+//             }
+//           }
+//         }
+
+//         setSpatialData(newSpatialData);
+//         spatialCache.set(newSpatialData);
+        
+//       } catch (err) {
+//         console.error('Error fetching geojson by bbox:', err);
+//         setError('Failed to load features for current view');
+//       } finally {
+//         setLoading(false);
+//         setLoadingLayers(new Set());
+//       }
+//     }, 500),
+//     [SPATIAL_API_BASE, navigate, spatialData, simplificationEnabled, dataQuality, spatialCache]
+//   );
+
+//   // ------------------------
+//   // Initial full-layer fetch for selected layers
+//   // ------------------------
+//   useEffect(() => {
+//     const token = localStorage.getItem('token');
+//     if (!token || !checkTokenValidity(token)) {
+//       navigate('/login');
+//       return;
+//     }
+
+//     setError('');
+//     setLoading(true);
+
+//     (async () => {
+//       try {
+//         setLoadingLayers(new Set([...selectedLayers]));
+//         const newSpatialData = { ...spatialData };
+
+//         for (const layer of selectedLayers) {
+//           try {
+//             const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
+//             const resp = await fetchWithRetry(url, {
+//               headers: { 
+//                 'Authorization': `Bearer ${token}`,
+//                 'Content-Type': 'application/json'
+//               },
+//               params: { simplify: 0 }, // No simplification for initial load
+//             }, 2, 45000);
+
+//             const fc = resp.data || { type: 'FeatureCollection', features: [] };
+//             newSpatialData[layer] = Array.isArray(fc.features) ? fc.features : [];
+//           } catch (err) {
+//             console.warn(`Initial fetch failed for ${layer}:`, err);
+//             newSpatialData[layer] = [];
+            
+//             if (err.response?.status === 401) {
+//               setError('Authentication failed. Please login again.');
+//               localStorage.removeItem('token');
+//               navigate('/login');
+//               break;
+//             }
+//           }
+//         }
+
+//         setSpatialData(newSpatialData);
+//         spatialCache.set(newSpatialData);
+//       } catch (err) {
+//         console.warn('Initial layer fetch failed:', err);
+//       } finally {
+//         setLoading(false);
+//         setLoadingLayers(new Set());
+//       }
+//     })();
+//   }, [selectedLayers, SPATIAL_API_BASE, navigate, spatialCache]);
+
+//   // ------------------------
+//   // Bounds and zoom change handler
+//   // ------------------------
+//   const handleMapChange = (bounds, zoomLevel) => {
+//     setCurrentZoom(zoomLevel);
+    
+//     if (selectedLayers.size > 0 && bounds) {
+//       // Only refetch if zoom level changes significantly to prevent distortion
+//       if (Math.abs(zoomLevel - lastZoomRef.current) > 1) {
+//         lastZoomRef.current = zoomLevel;
+//         fetchGeoByBbox(selectedLayers, bounds, zoomLevel);
+//       }
+//     }
+//   };
+
+//   // ------------------------
+//   // Handle data quality change
+//   // ------------------------
+//   const handleQualityChange = (quality) => {
+//     setDataQuality(quality);
+//     // Clear cache and refetch data with new quality settings
+//     spatialDataCache.current.clear();
+//     if (selectedLayers.size > 0) {
+//       lastBoundsKeyRef.current = null;
+//     }
+//   };
+
+//   // ------------------------
+//   // Export functionality
+//   // ------------------------
+//   const exportData = async (format = 'geojson') => {
+//     setIsExporting(true);
+//     setExportProgress(0);
+    
+//     try {
+//       const dataToExport = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+      
+//       if (format === 'geojson') {
+//         const blob = new Blob([JSON.stringify(dataToExport)], { type: 'application/json' });
+//         const url = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = url;
+//         a.download = `map-export-${new Date().toISOString().split('T')[0]}.json`;
+//         document.body.appendChild(a);
+//         a.click();
+//         document.body.removeChild(a);
+//         URL.revokeObjectURL(url);
+//       } else if (format === 'csv') {
+//         let csvContent = 'Layer,Feature Count\n';
+//         Object.entries(dataToExport).forEach(([layer, features]) => {
+//           csvContent += `${layer},${features.length}\n`;
+//         });
+        
+//         const blob = new Blob([csvContent], { type: 'text/csv' });
+//         const url = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = url;
+//         a.download = `map-stats-${new Date().toISOString().split('T')[0]}.csv`;
+//         document.body.appendChild(a);
+//         a.click();
+//         document.body.removeChild(a);
+//         URL.revokeObjectURL(url);
+//       }
+      
+//       setExportProgress(100);
+//     } catch (error) {
+//       console.error('Export failed:', error);
+//       setError('Export failed: ' + error.message);
+//     } finally {
+//       setTimeout(() => {
+//         setIsExporting(false);
+//         setExportProgress(0);
+//       }, 1000);
+//     }
+//   };
+
+//   // ------------------------
+//   // Filter handlers
+//   // ------------------------
+//   const handleFilterChange = (layer, property, value, checked) => {
+//     setActiveFilters(prev => {
+//       const newFilters = { ...prev };
+//       if (checked) {
+//         if (!newFilters[property]) newFilters[property] = [];
+//         newFilters[property].push(value);
+//       } else {
+//         if (newFilters[property]) {
+//           newFilters[property] = newFilters[property].filter(v => v !== value);
+//           if (newFilters[property].length === 0) {
+//             delete newFilters[property];
+//           }
+//         }
+//       }
+//       return newFilters;
+//     });
+//   };
+
+//   const clearFilters = () => {
+//     setActiveFilters({});
+//     setSearchQuery('');
+//   };
+
+//   // ------------------------
+//   // Handle layer selection change
+//   // ------------------------
+//   const handleLayerToggle = (layerKey) => {
+//     setSelectedLayers(prev => {
+//       const newLayers = new Set(prev);
+//       if (newLayers.has(layerKey)) {
+//         newLayers.delete(layerKey);
+//       } else {
+//         newLayers.add(layerKey);
+//       }
+//       return newLayers;
+//     });
+//   };
+
+//   // ------------------------
+//   // Handle logout
+//   // ------------------------
+//   const handleLogout = () => {
+//     localStorage.removeItem('token');
+//     localStorage.removeItem('spatial-data-cache');
+//     navigate('/login');
+//   };
+
+//   // ------------------------
+//   // UI styles
+//   // ------------------------
+//   const containerStyle = { display: 'flex', height: '90vh', gap: '16px' };
+//   const cardStyle = { 
+//     border: '1px solid #ddd', 
+//     borderRadius: '8px', 
+//     padding: '16px', 
+//     backgroundColor: '#f9f9f9', 
+//     height: '100%', 
+//     overflowY: 'auto',
+//     boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
+//   };
+//   const leftStyle = { width: '350px', ...cardStyle };
+//   const rightStyle = { flex: 1, ...cardStyle, padding: 0 };
+//   const buttonStyle = { 
+//     padding: '8px 12px', 
+//     margin: '4px 0', 
+//     width: '100%', 
+//     borderRadius: '4px', 
+//     border: 'none', 
+//     color: '#fff', 
+//     cursor: 'pointer',
+//     transition: 'background-color 0.2s ease'
+//   };
+//   const checkboxStyle = { marginRight: '8px', cursor: 'pointer' };
+//   const inputStyle = {
+//     width: '100%',
+//     padding: '8px',
+//     border: '1px solid #ddd',
+//     borderRadius: '4px',
+//     marginBottom: '8px'
+//   };
+
+//   const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+//   const totalFeatures = Object.values(displayData).reduce((sum, features) => sum + features.length, 0);
+
+//   return (
+//     <div style={containerStyle}>
+//       <div style={leftStyle}>
+//         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+//           <h2 style={{ margin: 0 }}>Layers / Elements</h2>
+//           <button 
+//             onClick={handleLogout}
+//             style={{ 
+//               padding: '6px 12px', 
+//               backgroundColor: '#dc3545', 
+//               color: 'white', 
+//               border: 'none', 
+//               borderRadius: '4px', 
+//               cursor: 'pointer' 
+//             }}
+//           >
+//             Logout
+//           </button>
+//         </div>
+
+//         {/* Data Quality Settings */}
+//         <div style={{ marginBottom: '16px', padding: '10px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
+//           <h4 style={{ margin: '0 0 8px 0' }}>Data Quality</h4>
+//           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+//             <button 
+//               style={{ 
+//                 ...buttonStyle, 
+//                 backgroundColor: dataQuality === 'high' ? '#28a745' : '#6c757d',
+//                 padding: '4px 8px',
+//                 fontSize: '12px'
+//               }}
+//               onClick={() => handleQualityChange('high')}
+//             >
+//               High Quality
+//             </button>
+//             <button 
+//               style={{ 
+//                 ...buttonStyle, 
+//                 backgroundColor: dataQuality === 'balanced' ? '#007bff' : '#6c757d',
+//                 padding: '4px 8px',
+//                 fontSize: '12px'
+//               }}
+//               onClick={() => handleQualityChange('balanced')}
+//             >
+//               Balanced
+//             </button>
+//             <button 
+//               style={{ 
+//                 ...buttonStyle, 
+//                 backgroundColor: dataQuality === 'performance' ? '#ffc107' : '#6c757d',
+//                 padding: '4px 8px',
+//                 fontSize: '12px'
+//               }}
+//               onClick={() => handleQualityChange('performance')}
+//             >
+//               Performance
+//             </button>
+//           </div>
+//           <label style={{ display: 'flex', alignItems: 'center', fontSize: '14px' }}>
+//             <input
+//               type="checkbox"
+//               checked={simplificationEnabled}
+//               onChange={(e) => setSimplificationEnabled(e.target.checked)}
+//               style={checkboxStyle}
+//             />
+//             Enable Simplification
+//           </label>
+//           <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+//             Current Zoom: {Math.round(currentZoom)}x
+//             {simplificationEnabled && ` | Simplification: ${getSimplificationFactor(currentZoom).toFixed(6)}`}
+//           </div>
+//         </div>
+
+//         {/* Search Box */}
+//         <div style={{ marginBottom: '16px' }}>
+//           <input
+//             type="text"
+//             placeholder="Search features..."
+//             value={searchQuery}
+//             onChange={(e) => setSearchQuery(e.target.value)}
+//             style={inputStyle}
+//           />
+//           <div style={{ fontSize: '12px', color: '#666' }}>
+//             Searching {totalFeatures} features across {Object.keys(displayData).length} layers
+//           </div>
+//         </div>
+
+//         {/* Filter Toggle */}
+//         <button 
+//           onClick={() => setShowFilters(!showFilters)}
+//           style={{ ...buttonStyle, backgroundColor: '#6c757d', marginBottom: '16px' }}
+//         >
+//           {showFilters ? 'Hide Filters' : 'Show Filters'}
+//         </button>
+
+//         {/* Filters Panel */}
+//         {showFilters && Object.keys(activeFilters).length > 0 && (
+//           <div style={{ marginBottom: '16px', padding: '8px', backgroundColor: '#e9ecef', borderRadius: '4px' }}>
+//             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+//               <strong>Active Filters:</strong>
+//               <button 
+//                 onClick={clearFilters}
+//                 style={{ padding: '2px 8px', fontSize: '12px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '2px' }}
+//               >
+//                 Clear All
+//               </button>
+//             </div>
+//             {Object.entries(activeFilters).map(([key, values]) => (
+//               <div key={key} style={{ fontSize: '12px', marginTop: '4px' }}>
+//                 {key}: {values.join(', ')}
+//               </div>
+//             ))}
+//           </div>
+//         )}
+
+//         <div style={{ marginBottom: '16px' }}>
+//           <h4>Select Layers to Display</h4>
+//           {dataTypes.map(({ key, label }) => (
+//             <div key={key} style={{ marginBottom: '8px' }}>
+//               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+//                 <input
+//                   type="checkbox"
+//                   checked={selectedLayers.has(key)}
+//                   onChange={() => handleLayerToggle(key)}
+//                   style={checkboxStyle}
+//                 />
+//                 <span>{label}</span>
+//                 {loadingLayers.has(key) && <span style={{ marginLeft: '8px', color: '#007bff' }}>⏳</span>}
+//                 {mapStats[key] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[key].count})</span>}
+//               </label>
+//             </div>
+//           ))}
+//         </div>
+
+//         <div>
+//           <p><b>Selected Layers:</b> {Array.from(selectedLayers).map(layer => layer.replace(/_/g, ' ')).join(', ')}</p>
+//           <p><b>Total Features:</b> {totalFeatures}</p>
+//         </div>
+
+//         <div style={{ marginTop: '16px' }}>
+//           <h4>Legend</h4>
+//           {Object.entries(layerColors).map(([layer, color]) => (
+//             <div key={layer} style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+//               <div style={{ width: '20px', height: '20px', backgroundColor: color, marginRight: '8px', border: '1px solid #000' }} />
+//               <span>{layer.replace(/_/g, ' ').toUpperCase()}</span>
+//               {mapStats[layer] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[layer].count})</span>}
+//             </div>
+//           ))}
+//         </div>
+
+//         {loading && <p>Loading map data...</p>}
+//         {error && (
+//           <div style={{ 
+//             padding: '10px', 
+//             backgroundColor: '#ffebee', 
+//             border: '1px solid #f44336', 
+//             borderRadius: '4px', 
+//             margin: '10px 0' 
+//           }}>
+//             <p style={{ color: '#d32f2f', margin: 0 }}>{error}</p>
+//           </div>
+//         )}
+
+//         {/* Export Buttons */}
+//         <div style={{ marginTop: '16px' }}>
+//           <h4>Export</h4>
+//           <button 
+//             style={{ ...buttonStyle, backgroundColor: '#007bff' }} 
+//             onClick={() => exportData('geojson')}
+//             disabled={isExporting}
+//           >
+//             {isExporting ? `Exporting... ${exportProgress}%` : 'Export GeoJSON'}
+//           </button>
+//           <button 
+//             style={{ ...buttonStyle, backgroundColor: '#28a745' }} 
+//             onClick={() => exportData('csv')}
+//             disabled={isExporting}
+//           >
+//             Export Statistics CSV
+//           </button>
+//         </div>
+
+//         <button style={{ ...buttonStyle, backgroundColor: '#28a745' }} onClick={() => setSelectedLayers(new Set(dataTypes.map(dt => dt.key)))}>
+//           Select All Layers
+//         </button>
+//         <button style={{ ...buttonStyle, backgroundColor: '#6c757d' }} onClick={() => setSelectedLayers(new Set())}>
+//           Clear All Layers
+//         </button>
+
+//         {/* Cache Info */}
+//         <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
+//           <p>Data cached for offline use</p>
+//           <p>Zoom: {Math.round(currentZoom)}x | Quality: {dataQuality}</p>
+//         </div>
+//       </div>
+
+//       <div style={rightStyle}>
+//         <MapComponent
+//           spatialData={displayData}
+//           initialCenter={[-6.764538, 39.214464]}
+//           onMapChange={handleMapChange}
+//           layerColors={layerColors}
+//           highlightedFeatures={filteredFeatures}
+//           currentZoom={currentZoom}
+//         />
+//       </div>
+//     </div>
+//   );
+// }
+
+// export default MapView;
+
 // MapView.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -1890,28 +2743,71 @@ function debounce(fn, wait) {
 }
 
 // ------------------------
-// Retry fetch helper with exponential backoff
+// Request queue manager to prevent resource exhaustion
+// ------------------------
+const createRequestQueue = (maxConcurrent = 2, retryDelay = 2000) => {
+  let pending = [];
+  let inProgress = 0;
+  
+  const processNext = () => {
+    if (pending.length === 0 || inProgress >= maxConcurrent) return;
+    
+    inProgress++;
+    const { url, options, resolve, reject, retries = 0 } = pending.shift();
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeout || 45000);
+    
+    axios({
+      ...options,
+      url,
+      signal: controller.signal,
+    })
+    .then(response => {
+      clearTimeout(timeoutId);
+      resolve(response);
+    })
+    .catch(error => {
+      clearTimeout(timeoutId);
+      
+      // Check if this is a resource error that should be retried
+      if ((error.code === 'ERR_NETWORK' || error.message.includes('INSUFFICIENT_RESOURCES')) && retries < 3) {
+        console.warn(`Request failed due to resources, retrying in ${retryDelay}ms...`);
+        // Requeue with delay
+        setTimeout(() => {
+          pending.push({ url, options, resolve, reject, retries: retries + 1 });
+          processNext();
+        }, retryDelay * (retries + 1));
+      } else {
+        reject(error);
+      }
+    })
+    .finally(() => {
+      inProgress--;
+      processNext();
+    });
+  };
+  
+  return {
+    add: (url, options) => new Promise((resolve, reject) => {
+      pending.push({ url, options, resolve, reject });
+      processNext();
+    }),
+    clear: () => {
+      pending = [];
+      inProgress = 0;
+    }
+  };
+};
+
+// Create a global request queue
+const requestQueue = createRequestQueue(2, 2000);
+
+// ------------------------
+// Retry fetch helper with exponential backoff and queueing
 // ------------------------
 const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await axios({
-        ...options,
-        url,
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      console.warn(`Attempt ${i + 1} failed, retrying...`);
-      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
-    }
-  }
+  return requestQueue.add(url, { ...options, timeout });
 };
 
 // ------------------------
@@ -2014,6 +2910,29 @@ const useLocalStorageCache = (key, ttl = 3600000) => {
 };
 
 // ------------------------
+// Layer priority system
+// ------------------------
+const getLayerPriority = (layer) => {
+  const priorityMap = {
+    'buildings': 1,
+    'roads': 1,
+    'aru_boundary': 1,
+    'water_supply': 2,
+    'drainage': 2,
+    'electricity': 2,
+    'vegetation': 3,
+    'footpaths': 3,
+    'parking': 3,
+    'solid_waste': 4,
+    'vimbweta': 4,
+    'security': 4,
+    'recreational_areas': 4
+  };
+  
+  return priorityMap[layer] || 5;
+};
+
+// ------------------------
 // MapView Page
 // ------------------------
 function MapView() {
@@ -2033,6 +2952,7 @@ function MapView() {
   const [currentZoom, setCurrentZoom] = useState(15);
   const [simplificationEnabled, setSimplificationEnabled] = useState(true);
   const [dataQuality, setDataQuality] = useState('balanced');
+  const [resourceWarning, setResourceWarning] = useState(false);
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -2042,6 +2962,7 @@ function MapView() {
   const spatialDataCache = useRef(new Map());
   const lastBoundsKeyRef = useRef(null);
   const lastZoomRef = useRef(currentZoom);
+  const failedRequests = useRef(new Set());
 
   const categoryToTypeMap = {
     buildings: 'buildings',
@@ -2060,19 +2981,19 @@ function MapView() {
   };
 
   const dataTypes = [
-    { key: 'buildings', label: 'Buildings', hasProperties: true },
-    { key: 'roads', label: 'Roads', hasProperties: true },
-    { key: 'footpaths', label: 'Footpaths', hasProperties: true },
-    { key: 'vegetation', label: 'Vegetation', hasProperties: true },
-    { key: 'parking', label: 'Parking', hasProperties: true },
-    { key: 'solid_waste', label: 'Solid Waste', hasProperties: true },
-    { key: 'electricity', label: 'Electricity', hasProperties: true },
-    { key: 'water_supply', label: 'Water Supply', hasProperties: true },
-    { key: 'drainage', label: 'Drainage System', hasProperties: true },
-    { key: 'vimbweta', label: 'Vimbweta', hasProperties: true },
-    { key: 'security', label: 'Security Lights', hasProperties: true },
-    { key: 'recreational_areas', label: 'Recreational Areas', hasProperties: true },
-    { key: 'aru_boundary', label: 'ARU Boundary', hasProperties: false }
+    { key: 'buildings', label: 'Buildings', hasProperties: true, priority: 1 },
+    { key: 'roads', label: 'Roads', hasProperties: true, priority: 1 },
+    { key: 'aru_boundary', label: 'ARU Boundary', hasProperties: false, priority: 1 },
+    { key: 'water_supply', label: 'Water Supply', hasProperties: true, priority: 2 },
+    { key: 'drainage', label: 'Drainage System', hasProperties: true, priority: 2 },
+    { key: 'electricity', label: 'Electricity', hasProperties: true, priority: 2 },
+    { key: 'vegetation', label: 'Vegetation', hasProperties: true, priority: 3 },
+    { key: 'footpaths', label: 'Footpaths', hasProperties: true, priority: 3 },
+    { key: 'parking', label: 'Parking', hasProperties: true, priority: 3 },
+    { key: 'solid_waste', label: 'Solid Waste', hasProperties: true, priority: 4 },
+    { key: 'vimbweta', label: 'Vimbweta', hasProperties: true, priority: 4 },
+    { key: 'security', label: 'Security Lights', hasProperties: true, priority: 4 },
+    { key: 'recreational_areas', label: 'Recreational Areas', hasProperties: true, priority: 4 }
   ];
 
   const layerColors = {
@@ -2199,7 +3120,16 @@ function MapView() {
   }, [activeFilters, spatialData]);
 
   // ------------------------
-  // Fetch GeoJSON by bounding box for multiple layers
+  // Sort layers by priority for sequential loading
+  // ------------------------
+  const sortLayersByPriority = (layers) => {
+    return Array.from(layers).sort((a, b) => {
+      return getLayerPriority(a) - getLayerPriority(b);
+    });
+  };
+
+  // ------------------------
+  // Fetch GeoJSON by bounding box for multiple layers with resource management
   // ------------------------
   const fetchGeoByBbox = useCallback(
     debounce(async (layers, bounds, zoomLevel) => {
@@ -2238,7 +3168,16 @@ function MapView() {
           }
         }
 
-        for (const layer of layers) {
+        // Sort layers by priority to load important ones first
+        const sortedLayers = sortLayersByPriority(layers);
+        
+        for (const layer of sortedLayers) {
+          // Skip layers that have recently failed multiple times
+          if (failedRequests.current.has(layer) && failedRequests.current.get(layer) >= 3) {
+            console.warn(`Skipping ${layer} due to repeated failures`);
+            continue;
+          }
+
           try {
             const cacheKey = `${layer}-${bbox}-${simplify}-${zoomLevel}`;
             if (spatialDataCache.current.has(cacheKey)) {
@@ -2266,9 +3205,18 @@ function MapView() {
             
             newSpatialData[layer] = features;
             spatialDataCache.current.set(cacheKey, features);
+            
+            // Reset failure count on success
+            if (failedRequests.current.has(layer)) {
+              failedRequests.current.delete(layer);
+            }
           } catch (err) {
             console.error(`Error fetching geojson for ${layer}:`, err);
-            newSpatialData[layer] = [];
+            newSpatialData[layer] = spatialData[layer] || [];
+            
+            // Track failed requests
+            const failCount = failedRequests.current.get(layer) || 0;
+            failedRequests.current.set(layer, failCount + 1);
             
             if (err.response?.status === 401) {
               setError('Authentication failed. Please login again.');
@@ -2277,8 +3225,14 @@ function MapView() {
               break;
             } else if (err.response?.status === 404) {
               console.warn(`Layer "${layer}" not found on server.`);
+            } else if (err.code === 'ERR_NETWORK' || err.message.includes('INSUFFICIENT_RESOURCES')) {
+              setResourceWarning(true);
+              setTimeout(() => setResourceWarning(false), 5000);
             }
           }
+          
+          // Add a small delay between layer requests to reduce server load
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
 
         setSpatialData(newSpatialData);
@@ -2291,12 +3245,12 @@ function MapView() {
         setLoading(false);
         setLoadingLayers(new Set());
       }
-    }, 500),
+    }, 800), // Increased debounce time to reduce requests
     [SPATIAL_API_BASE, navigate, spatialData, simplificationEnabled, dataQuality, spatialCache]
   );
 
   // ------------------------
-  // Initial full-layer fetch for selected layers
+  // Initial full-layer fetch for selected layers with resource management
   // ------------------------
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -2313,7 +3267,17 @@ function MapView() {
         setLoadingLayers(new Set([...selectedLayers]));
         const newSpatialData = { ...spatialData };
 
-        for (const layer of selectedLayers) {
+        // Sort layers by priority to load important ones first
+        const sortedLayers = sortLayersByPriority(selectedLayers);
+        
+        for (const layer of sortedLayers) {
+          // Skip layers that have recently failed multiple times
+          if (failedRequests.current.has(layer) && failedRequests.current.get(layer) >= 3) {
+            console.warn(`Skipping ${layer} due to repeated failures`);
+            newSpatialData[layer] = [];
+            continue;
+          }
+
           try {
             const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
             const resp = await fetchWithRetry(url, {
@@ -2326,17 +3290,32 @@ function MapView() {
 
             const fc = resp.data || { type: 'FeatureCollection', features: [] };
             newSpatialData[layer] = Array.isArray(fc.features) ? fc.features : [];
+            
+            // Reset failure count on success
+            if (failedRequests.current.has(layer)) {
+              failedRequests.current.delete(layer);
+            }
           } catch (err) {
             console.warn(`Initial fetch failed for ${layer}:`, err);
             newSpatialData[layer] = [];
+            
+            // Track failed requests
+            const failCount = failedRequests.current.get(layer) || 0;
+            failedRequests.current.set(layer, failCount + 1);
             
             if (err.response?.status === 401) {
               setError('Authentication failed. Please login again.');
               localStorage.removeItem('token');
               navigate('/login');
               break;
+            } else if (err.code === 'ERR_NETWORK' || err.message.includes('INSUFFICIENT_RESOURCES')) {
+              setResourceWarning(true);
+              setTimeout(() => setResourceWarning(false), 5000);
             }
           }
+          
+          // Add a small delay between layer requests to reduce server load
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
 
         setSpatialData(newSpatialData);
@@ -2473,6 +3452,7 @@ function MapView() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('spatial-data-cache');
+    requestQueue.clear();
     navigate('/login');
   };
 
@@ -2532,6 +3512,20 @@ function MapView() {
             Logout
           </button>
         </div>
+
+        {/* Resource Warning */}
+        {resourceWarning && (
+          <div style={{ 
+            padding: '10px', 
+            backgroundColor: '#fff3cd', 
+            border: '1px solid #ffeaa7', 
+            borderRadius: '4px', 
+            marginBottom: '16px',
+            color: '#856404'
+          }}>
+            <strong>Server Resources Limited:</strong> Some data may load slowly or be temporarily unavailable.
+          </div>
+        )}
 
         {/* Data Quality Settings */}
         <div style={{ marginBottom: '16px', padding: '10px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
@@ -2630,7 +3624,7 @@ function MapView() {
 
         <div style={{ marginBottom: '16px' }}>
           <h4>Select Layers to Display</h4>
-          {dataTypes.map(({ key, label }) => (
+          {dataTypes.map(({ key, label, priority }) => (
             <div key={key} style={{ marginBottom: '8px' }}>
               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input
@@ -2638,13 +3632,25 @@ function MapView() {
                   checked={selectedLayers.has(key)}
                   onChange={() => handleLayerToggle(key)}
                   style={checkboxStyle}
+                  disabled={failedRequests.current.has(key) && failedRequests.current.get(key) >= 3}
                 />
-                <span>{label}</span>
+                <span style={{
+                  opacity: failedRequests.current.has(key) && failedRequests.current.get(key) >= 3 ? 0.5 : 1
+                }}>
+                  {label}
+                  {priority <= 2 && <span style={{color: '#dc3545', fontSize: '10px', marginLeft: '4px'}}>★</span>}
+                </span>
                 {loadingLayers.has(key) && <span style={{ marginLeft: '8px', color: '#007bff' }}>⏳</span>}
                 {mapStats[key] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[key].count})</span>}
+                {failedRequests.current.has(key) && failedRequests.current.get(key) >= 3 && (
+                  <span style={{ marginLeft: '8px', fontSize: '10px', color: '#dc3545' }}>Failed</span>
+                )}
               </label>
             </div>
           ))}
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+            <span style={{color: '#dc3545'}}>★</span> indicates high priority layers
+          </div>
         </div>
 
         <div>
@@ -2706,6 +3712,7 @@ function MapView() {
         <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
           <p>Data cached for offline use</p>
           <p>Zoom: {Math.round(currentZoom)}x | Quality: {dataQuality}</p>
+          <p>Concurrent requests limited to prevent server overload</p>
         </div>
       </div>
 
