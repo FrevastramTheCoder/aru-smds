@@ -207,60 +207,314 @@
 //       ))}
 //     </MapContainer>
 //   );
+// // }
+// import React from 'react';
+// import { MapContainer, TileLayer, GeoJSON, useMapEvents } from 'react-leaflet';
+// import L from 'leaflet';
+// import 'leaflet/dist/leaflet.css';
+
+// // ------------------------
+// // Map events handler
+// // ------------------------
+// function MapEvents({ onBoundsChange }) {
+//   useMapEvents({
+//     moveend: (e) => onBoundsChange(e.target.getBounds()),
+//     zoomend: (e) => onBoundsChange(e.target.getBounds()),
+//   });
+//   return null;
 // }
-import React from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMapEvents } from 'react-leaflet';
+
+// // ------------------------
+// // MapComponent
+// // ------------------------
+// export default function MapComponent({ spatialData, initialCenter, onBoundsChange, layerColors }) {
+//   return (
+//     <MapContainer center={initialCenter} zoom={16} style={{ width: '100%', height: '100%' }}>
+//       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+//       <MapEvents onBoundsChange={onBoundsChange} />
+
+//       {Object.entries(spatialData).map(([layer, features]) => (
+//         <GeoJSON
+//           key={layer}
+//           data={{ type: 'FeatureCollection', features }}
+//           style={() => ({
+//             color: layerColors?.[layer] || '#000',
+//             weight: 2,
+//             fillOpacity: 0.4,
+//           })}
+//           pointToLayer={(feature, latlng) =>
+//             L.circleMarker(latlng, {
+//               radius: 5,
+//               fillColor: layerColors?.[layer] || '#000',
+//               color: '#000',
+//               weight: 1,
+//               fillOpacity: 0.8,
+//             })
+//           }
+//           onEachFeature={(feature, layerInstance) => {
+//             if (feature.properties) {
+//               const popupContent = Object.entries(feature.properties)
+//                 .map(([k, v]) => `<b>${k}:</b> ${v}`)
+//                 .join('<br>');
+//               layerInstance.bindPopup(popupContent);
+//             }
+//           }}
+//         />
+//       ))}
+//     </MapContainer>
+//   );
+// }
+// components/MapComponent.jsx
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// ------------------------
-// Map events handler
-// ------------------------
-function MapEvents({ onBoundsChange }) {
-  useMapEvents({
-    moveend: (e) => onBoundsChange(e.target.getBounds()),
-    zoomend: (e) => onBoundsChange(e.target.getBounds()),
-  });
-  return null;
-}
+// Fix for default markers in Leaflet
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
-// ------------------------
-// MapComponent
-// ------------------------
-export default function MapComponent({ spatialData, initialCenter, onBoundsChange, layerColors }) {
-  return (
-    <MapContainer center={initialCenter} zoom={16} style={{ width: '100%', height: '100%' }}>
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <MapEvents onBoundsChange={onBoundsChange} />
+const MapComponent = ({ 
+  spatialData, 
+  initialCenter, 
+  initialZoom = 16, 
+  onBoundsChange,
+  layerColors,
+  highlightedFeatures 
+}) => {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const layersRef = useRef({});
+  const [map, setMap] = useState(null);
 
-      {Object.entries(spatialData).map(([layer, features]) => (
-        <GeoJSON
-          key={layer}
-          data={{ type: 'FeatureCollection', features }}
-          style={() => ({
-            color: layerColors?.[layer] || '#000',
-            weight: 2,
-            fillOpacity: 0.4,
-          })}
-          pointToLayer={(feature, latlng) =>
-            L.circleMarker(latlng, {
-              radius: 5,
-              fillColor: layerColors?.[layer] || '#000',
-              color: '#000',
-              weight: 1,
-              fillOpacity: 0.8,
-            })
+  useEffect(() => {
+    // Initialize map
+    if (!mapInstance.current) {
+      mapInstance.current = L.map(mapRef.current).setView(initialCenter, initialZoom);
+      
+      // Add base tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(mapInstance.current);
+      
+      setMap(mapInstance.current);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
+  }, [initialCenter, initialZoom]);
+
+  // Handle bounds change
+  useEffect(() => {
+    if (!map || !onBoundsChange) return;
+
+    const handleMoveEnd = () => {
+      const bounds = map.getBounds();
+      onBoundsChange(bounds);
+    };
+
+    map.on('moveend', handleMoveEnd);
+    
+    return () => {
+      map.off('moveend', handleMoveEnd);
+    };
+  }, [map, onBoundsChange]);
+
+  // Render spatial data
+  useEffect(() => {
+    if (!map) return;
+
+    // Clear existing layers
+    Object.values(layersRef.current).forEach(layerGroup => {
+      if (layerGroup && map.hasLayer(layerGroup)) {
+        map.removeLayer(layerGroup);
+      }
+    });
+    layersRef.current = {};
+
+    // Add new layers
+    Object.entries(spatialData).forEach(([layerKey, features]) => {
+      if (!features || features.length === 0) return;
+
+      const layerGroup = L.layerGroup().addTo(map);
+      layersRef.current[layerKey] = layerGroup;
+
+      // Get the color for this layer
+      const layerColor = layerColors && layerColors[layerKey] 
+        ? layerColors[layerKey] 
+        : '#3388ff'; // Default color
+
+      features.forEach(feature => {
+        if (!feature.geometry) return;
+
+        try {
+          let leafletLayer;
+          
+          switch (feature.geometry.type) {
+            case 'Point':
+              leafletLayer = L.circleMarker(
+                [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
+                {
+                  radius: 5,
+                  fillColor: layerColor,
+                  color: '#000',
+                  weight: 1,
+                  opacity: 1,
+                  fillOpacity: 0.8
+                }
+              );
+              break;
+              
+            case 'LineString':
+              leafletLayer = L.polyline(
+                feature.geometry.coordinates.map(coord => [coord[1], coord[0]]),
+                {
+                  color: layerColor,
+                  weight: 4,
+                  opacity: 0.7,
+                  lineJoin: 'round'
+                }
+              );
+              break;
+              
+            case 'Polygon':
+              leafletLayer = L.polygon(
+                feature.geometry.coordinates[0].map(coord => [coord[1], coord[0]]),
+                {
+                  fillColor: layerColor,
+                  color: '#000',
+                  weight: 2,
+                  opacity: 0.8,
+                  fillOpacity: 0.5
+                }
+              );
+              break;
+              
+            case 'MultiPolygon':
+              const latLngs = feature.geometry.coordinates.map(polygon => 
+                polygon[0].map(coord => [coord[1], coord[0]])
+              );
+              
+              leafletLayer = L.polygon(
+                latLngs,
+                {
+                  fillColor: layerColor,
+                  color: '#000',
+                  weight: 2,
+                  opacity: 0.8,
+                  fillOpacity: 0.5
+                }
+              );
+              break;
+              
+            default:
+              console.warn(`Unsupported geometry type: ${feature.geometry.type}`);
+              return;
           }
-          onEachFeature={(feature, layerInstance) => {
-            if (feature.properties) {
-              const popupContent = Object.entries(feature.properties)
-                .map(([k, v]) => `<b>${k}:</b> ${v}`)
-                .join('<br>');
-              layerInstance.bindPopup(popupContent);
-            }
-          }}
-        />
-      ))}
-    </MapContainer>
-  );
-}
+
+          // Add popup with properties if available
+          if (feature.properties) {
+            const popupContent = Object.entries(feature.properties)
+              .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+              .join('<br/>');
+            
+            leafletLayer.bindPopup(popupContent);
+          }
+
+          layerGroup.addLayer(leafletLayer);
+        } catch (error) {
+          console.error('Error rendering feature:', error, feature);
+        }
+      });
+    });
+
+    // Fit map to show all features if there are any
+    if (Object.keys(spatialData).length > 0) {
+      const allLayers = Object.values(layersRef.current);
+      if (allLayers.length > 0) {
+        const group = new L.featureGroup(allLayers);
+        map.fitBounds(group.getBounds(), { padding: [50, 50] });
+      }
+    }
+  }, [map, spatialData, layerColors]);
+
+  // Handle highlighted features
+  useEffect(() => {
+    if (!map || !highlightedFeatures) return;
+
+    // Reset all layers to normal style first
+    Object.entries(layersRef.current).forEach(([layerKey, layerGroup]) => {
+      const layerColor = layerColors && layerColors[layerKey] 
+        ? layerColors[layerKey] 
+        : '#3388ff';
+      
+      layerGroup.eachLayer(layer => {
+        if (layer.setStyle) {
+          if (layer instanceof L.CircleMarker) {
+            layer.setStyle({
+              fillColor: layerColor,
+              color: '#000',
+              weight: 1
+            });
+          } else if (layer instanceof L.Polyline) {
+            layer.setStyle({
+              color: layerColor,
+              weight: 4
+            });
+          } else if (layer instanceof L.Polygon) {
+            layer.setStyle({
+              fillColor: layerColor,
+              color: '#000',
+              weight: 2
+            });
+          }
+        }
+      });
+    });
+
+    // Apply highlight style to filtered features
+    Object.entries(highlightedFeatures).forEach(([layerKey, features]) => {
+      const layerGroup = layersRef.current[layerKey];
+      if (!layerGroup) return;
+
+      const highlightColor = '#ff0000'; // Red for highlighting
+      
+      layerGroup.eachLayer(layer => {
+        // This is a simplified approach - in a real app you'd need to match
+        // the specific features that should be highlighted
+        if (layer.setStyle) {
+          if (layer instanceof L.CircleMarker) {
+            layer.setStyle({
+              fillColor: highlightColor,
+              color: '#000',
+              weight: 3
+            });
+          } else if (layer instanceof L.Polyline) {
+            layer.setStyle({
+              color: highlightColor,
+              weight: 6
+            });
+          } else if (layer instanceof L.Polygon) {
+            layer.setStyle({
+              fillColor: highlightColor,
+              color: '#000',
+              weight: 3
+            });
+          }
+        }
+      });
+    });
+  }, [map, highlightedFeatures, layerColors]);
+
+  return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
+};
+
+export default MapComponent;
