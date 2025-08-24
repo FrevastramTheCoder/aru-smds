@@ -855,7 +855,7 @@
 //     return false;
 //   }
 // };
-
+//corrected codes worked
 // // ------------------------
 // // MapView Page
 // // ------------------------
@@ -1155,7 +1155,6 @@
 // }
 
 // export default MapView;
-
 // MapView.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -1522,7 +1521,7 @@ function MapView() {
           <div style={{ 
             padding: '10px', 
             backgroundColor: '#ffebee', 
-            border: '1px solid'#f44336', 
+            border: '1px solid #f44336', 
             borderRadius: '4px', 
             margin: '10px 0' 
           }}>
