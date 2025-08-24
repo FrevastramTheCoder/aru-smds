@@ -2736,7 +2736,7 @@ import MapComponent from '../components/MapComponent';
 // ------------------------
 function debounce(func, wait) {
   let timeout;
-  return function executedFunction(...args) {
+  const debounced = function executedFunction(...args) {
     const later = () => {
       clearTimeout(timeout);
       func(...args);
@@ -2744,6 +2744,12 @@ function debounce(func, wait) {
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
   };
+  
+  debounced.cancel = () => {
+    clearTimeout(timeout);
+  };
+  
+  return debounced;
 }
 
 // ------------------------
@@ -2760,7 +2766,7 @@ const createRequestQueue = (maxConcurrent = 2, retryDelay = 2000) => {
     const { url, options, resolve, reject, retries = 0 } = pending.shift();
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), options.timeout || 45000);
+    const timeoutId = setTimeout(() => controller.abort(), options.timeout || 30000);
     
     axios({
       ...options,
@@ -2775,7 +2781,7 @@ const createRequestQueue = (maxConcurrent = 2, retryDelay = 2000) => {
       clearTimeout(timeoutId);
       
       // Check if this is a resource error that should be retried
-      if ((error.code === 'ERR_NETWORK' || error.message.includes('INSUFFICIENT_RESOURCES')) && retries < 3) {
+      if ((error.code === 'ERR_NETWORK' || error.message.includes('INSUFFICIENT_RESOURCES')) && retries < 2) {
         console.warn(`Request failed due to resources, retrying in ${retryDelay}ms...`);
         // Requeue with delay
         setTimeout(() => {
@@ -2810,7 +2816,7 @@ const requestQueue = createRequestQueue(2, 2000);
 // ------------------------
 // Retry fetch helper with exponential backoff and queueing
 // ------------------------
-const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+const fetchWithRetry = async (url, options, maxRetries = 2, timeout = 30000) => {
   return requestQueue.add(url, { ...options, timeout });
 };
 
@@ -2840,7 +2846,7 @@ const preventGeometryDistortion = (features, zoomLevel) => {
 
   // For lower zoom levels, use a more conservative simplification
   return features.map(feature => {
-    if (!feature.geometry) return feature;
+    if (!feature || !feature.geometry) return feature;
     
     // Only simplify complex geometries to prevent distortion
     const geometry = { ...feature.geometry };
@@ -2852,7 +2858,7 @@ const preventGeometryDistortion = (features, zoomLevel) => {
     else if (geometry.type === 'Polygon' && geometry.coordinates) {
       // For polygons, be very conservative with simplification
       geometry.coordinates = geometry.coordinates.map(ring => {
-        if (ring.length > 50) {
+        if (ring && ring.length > 50) {
           return ring.filter((_, index) => index % 2 === 0);
         }
         return ring;
@@ -2940,11 +2946,11 @@ const getLayerPriority = (layer) => {
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
   
   static getDerivedStateFromError(error) {
-    return { hasError: true };
+    return { hasError: true, error };
   }
   
   componentDidCatch(error, errorInfo) {
@@ -2953,7 +2959,18 @@ class ErrorBoundary extends React.Component {
   
   render() {
     if (this.state.hasError) {
-      return <div style={{ padding: '20px', textAlign: 'center' }}>Map component encountered an error. Please refresh the page.</div>;
+      return (
+        <div style={{ padding: '20px', textAlign: 'center', color: '#d32f2f' }}>
+          <h3>Map Error</h3>
+          <p>{this.state.error?.message || 'An error occurred in the map component'}</p>
+          <button 
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}
+          >
+            Try Again
+          </button>
+        </div>
+      );
     }
     
     return this.props.children;
@@ -2990,8 +3007,9 @@ function MapView() {
   const spatialDataCache = useRef(new Map());
   const lastBoundsKeyRef = useRef(null);
   const lastZoomRef = useRef(currentZoom);
-  const failedRequests = useRef(new Set());
+  const failedRequests = useRef(new Map()); // Changed to Map
   const lastFetchRef = useRef(0);
+  const abortControllers = useRef(new Map());
 
   // Use ref for the debounced function to maintain stability across renders
   const fetchGeoByBboxRef = useRef(null);
@@ -3007,7 +3025,7 @@ function MapView() {
     'water-supply': 'water_supply',
     'drainage-system': 'drainage',
     vimbweta: 'vimbweta',
-    'security-lights': 'security',
+    'security-lights': 'security_lights', // Fixed endpoint name
     'recreational-areas': 'recreational_areas',
     'aru-boundary': 'aru_boundary'
   };
@@ -3024,7 +3042,7 @@ function MapView() {
     { key: 'parking', label: 'Parking', hasProperties: true, priority: 3 },
     { key: 'solid_waste', label: 'Solid Waste', hasProperties: true, priority: 4 },
     { key: 'vimbweta', label: 'Vimbweta', hasProperties: true, priority: 4 },
-    { key: 'security', label: 'Security Lights', hasProperties: true, priority: 4 },
+    { key: 'security_lights', label: 'Security Lights', hasProperties: true, priority: 4 }, // Fixed key
     { key: 'recreational_areas', label: 'Recreational Areas', hasProperties: true, priority: 4 }
   ];
 
@@ -3039,12 +3057,24 @@ function MapView() {
     water_supply: '#3498db',
     drainage: '#16a085',
     vimbweta: '#d35400',
-    security: '#c0392b',
+    security_lights: '#c0392b', // Fixed key
     recreational_areas: '#7f8c8d',
     aru_boundary: '#000000'
   };
 
   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+
+  // Check if a layer endpoint exists
+  const checkLayerEndpoint = async (layer) => {
+    // For now, assume these endpoints exist based on common patterns
+    const existingEndpoints = new Set([
+      'buildings', 'roads', 'aru_boundary', 'water_supply', 'drainage',
+      'electricity', 'vegetation', 'footpaths', 'parking', 'solid_waste',
+      'vimbweta', 'security_lights', 'recreational_areas'
+    ]);
+    
+    return existingEndpoints.has(layer);
+  };
 
   // ------------------------
   // Check authentication on component mount
@@ -3089,10 +3119,15 @@ function MapView() {
   useEffect(() => {
     const stats = {};
     Object.entries(spatialData).forEach(([layer, features]) => {
+      if (!features || !Array.isArray(features)) {
+        stats[layer] = { count: 0, properties: {} };
+        return;
+      }
+      
       stats[layer] = {
         count: features.length,
         properties: features.reduce((acc, feature) => {
-          if (feature.properties) {
+          if (feature && feature.properties) {
             Object.entries(feature.properties).forEach(([key, value]) => {
               if (!acc[key]) acc[key] = new Set();
               if (value !== null && value !== undefined) {
@@ -3118,8 +3153,13 @@ function MapView() {
 
     const filtered = {};
     Object.entries(spatialData).forEach(([layer, features]) => {
+      if (!features || !Array.isArray(features)) {
+        filtered[layer] = [];
+        return;
+      }
+      
       filtered[layer] = features.filter(feature => 
-        feature.properties && 
+        feature && feature.properties && 
         Object.values(feature.properties).some(value => 
           value && value.toString().toLowerCase().includes(searchQuery.toLowerCase())
         )
@@ -3139,8 +3179,13 @@ function MapView() {
 
     const filtered = {};
     Object.entries(spatialData).forEach(([layer, features]) => {
+      if (!features || !Array.isArray(features)) {
+        filtered[layer] = [];
+        return;
+      }
+      
       filtered[layer] = features.filter(feature => {
-        if (!feature.properties) return false;
+        if (!feature || !feature.properties) return false;
         
         return Object.entries(activeFilters).every(([key, values]) => {
           if (!feature.properties[key]) return false;
@@ -3204,9 +3249,16 @@ function MapView() {
       
       for (const layer of sortedLayers) {
         // Skip layers that have recently failed multiple times
-        if (failedRequests.current.has(layer) && failedRequests.current.get(layer) >= 3) {
+        const failCount = failedRequests.current.get(layer) || 0;
+        if (failCount >= 3) {
           console.warn(`Skipping ${layer} due to repeated failures`);
           continue;
+        }
+
+        // Cancel any ongoing request for this layer
+        if (abortControllers.current.has(layer)) {
+          abortControllers.current.get(layer).abort();
+          abortControllers.current.delete(layer);
         }
 
         try {
@@ -3215,6 +3267,9 @@ function MapView() {
             newSpatialData[layer] = spatialDataCache.current.get(cacheKey);
             continue;
           }
+
+          const controller = new AbortController();
+          abortControllers.current.set(layer, controller);
 
           const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
           const resp = await fetchWithRetry(url, {
@@ -3226,7 +3281,8 @@ function MapView() {
               bbox, 
               simplify: simplificationEnabled ? simplify : 0
             },
-          }, 2, 45000);
+            signal: controller.signal
+          }, 2, 30000);
 
           let fc = resp.data || { type: 'FeatureCollection', features: [] };
           let features = Array.isArray(fc.features) ? fc.features : [];
@@ -3238,15 +3294,12 @@ function MapView() {
           spatialDataCache.current.set(cacheKey, features);
           
           // Reset failure count on success
-          if (failedRequests.current.has(layer)) {
-            failedRequests.current.delete(layer);
-          }
+          failedRequests.current.delete(layer);
         } catch (err) {
           console.error(`Error fetching geojson for ${layer}:`, err);
           newSpatialData[layer] = spatialData[layer] || [];
           
           // Track failed requests
-          const failCount = failedRequests.current.get(layer) || 0;
           failedRequests.current.set(layer, failCount + 1);
           
           if (err.response?.status === 401) {
@@ -3256,10 +3309,16 @@ function MapView() {
             break;
           } else if (err.response?.status === 404) {
             console.warn(`Layer "${layer}" not found on server.`);
+            // Don't mark as failed for 404, just skip
+            failedRequests.current.delete(layer);
           } else if (err.code === 'ERR_NETWORK' || err.message.includes('INSUFFICIENT_RESOURCES')) {
             setResourceWarning(true);
             setTimeout(() => setResourceWarning(false), 5000);
+          } else if (err.name === 'AbortError') {
+            console.log(`Request for ${layer} was aborted`);
           }
+        } finally {
+          abortControllers.current.delete(layer);
         }
         
         // Add a small delay between layer requests to reduce server load
@@ -3320,13 +3379,23 @@ function MapView() {
         
         for (const layer of sortedLayers) {
           // Skip layers that have recently failed multiple times
-          if (failedRequests.current.has(layer) && failedRequests.current.get(layer) >= 3) {
+          const failCount = failedRequests.current.get(layer) || 0;
+          if (failCount >= 3) {
             console.warn(`Skipping ${layer} due to repeated failures`);
             newSpatialData[layer] = [];
             continue;
           }
 
+          // Cancel any ongoing request for this layer
+          if (abortControllers.current.has(layer)) {
+            abortControllers.current.get(layer).abort();
+            abortControllers.current.delete(layer);
+          }
+
           try {
+            const controller = new AbortController();
+            abortControllers.current.set(layer, controller);
+
             const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
             const resp = await fetchWithRetry(url, {
               headers: { 
@@ -3334,21 +3403,19 @@ function MapView() {
                 'Content-Type': 'application/json'
               },
               params: { simplify: 0 }, // No simplification for initial load
-            }, 2, 45000);
+              signal: controller.signal
+            }, 2, 30000);
 
             const fc = resp.data || { type: 'FeatureCollection', features: [] };
             newSpatialData[layer] = Array.isArray(fc.features) ? fc.features : [];
             
             // Reset failure count on success
-            if (failedRequests.current.has(layer)) {
-              failedRequests.current.delete(layer);
-            }
+            failedRequests.current.delete(layer);
           } catch (err) {
             console.warn(`Initial fetch failed for ${layer}:`, err);
             newSpatialData[layer] = [];
             
             // Track failed requests
-            const failCount = failedRequests.current.get(layer) || 0;
             failedRequests.current.set(layer, failCount + 1);
             
             if (err.response?.status === 401) {
@@ -3356,10 +3423,18 @@ function MapView() {
               localStorage.removeItem('token');
               navigate('/login');
               break;
+            } else if (err.response?.status === 404) {
+              console.warn(`Layer "${layer}" not found on server.`);
+              // Don't mark as failed for 404, just skip
+              failedRequests.current.delete(layer);
             } else if (err.code === 'ERR_NETWORK' || err.message.includes('INSUFFICIENT_RESOURCES')) {
               setResourceWarning(true);
               setTimeout(() => setResourceWarning(false), 5000);
+            } else if (err.name === 'AbortError') {
+              console.log(`Request for ${layer} was aborted`);
             }
+          } finally {
+            abortControllers.current.delete(layer);
           }
           
           // Add a small delay between layer requests to reduce server load
@@ -3552,7 +3627,7 @@ function MapView() {
   };
 
   const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
-  const totalFeatures = Object.values(displayData).reduce((sum, features) => sum + features.length, 0);
+  const totalFeatures = Object.values(displayData).reduce((sum, features) => sum + (Array.isArray(features) ? features.length : 0), 0);
 
   return (
     <div style={containerStyle}>
@@ -3685,30 +3760,35 @@ function MapView() {
 
         <div style={{ marginBottom: '16px' }}>
           <h4>Select Layers to Display</h4>
-          {dataTypes.map(({ key, label, priority }) => (
-            <div key={key} style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={selectedLayers.has(key)}
-                  onChange={() => handleLayerToggle(key)}
-                  style={checkboxStyle}
-                  disabled={failedRequests.current.has(key) && failedRequests.current.get(key) >= 3}
-                />
-                <span style={{
-                  opacity: failedRequests.current.has(key) && failedRequests.current.get(key) >= 3 ? 0.5 : 1
-                }}>
-                  {label}
-                  {priority <= 2 && <span style={{color: '#dc3545', fontSize: '10px', marginLeft: '4px'}}>★</span>}
-                </span>
-                {loadingLayers.has(key) && <span style={{ marginLeft: '8px', color: '#007bff' }}>⏳</span>}
-                {mapStats[key] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[key].count})</span>}
-                {failedRequests.current.has(key) && failedRequests.current.get(key) >= 3 && (
-                  <span style={{ marginLeft: '8px', fontSize: '10px', color: '#dc3545' }}>Failed</span>
-                )}
-              </label>
-            </div>
-          ))}
+          {dataTypes.map(({ key, label, priority }) => {
+            const failCount = failedRequests.current.get(key) || 0;
+            const isFailed = failCount >= 3;
+            
+            return (
+              <div key={key} style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: isFailed ? 'not-allowed' : 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedLayers.has(key)}
+                    onChange={() => !isFailed && handleLayerToggle(key)}
+                    style={checkboxStyle}
+                    disabled={isFailed}
+                  />
+                  <span style={{
+                    opacity: isFailed ? 0.5 : 1
+                  }}>
+                    {label}
+                    {priority <= 2 && <span style={{color: '#dc3545', fontSize: '10px', marginLeft: '4px'}}>★</span>}
+                  </span>
+                  {loadingLayers.has(key) && <span style={{ marginLeft: '8px', color: '#007bff' }}>⏳</span>}
+                  {mapStats[key] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[key].count})</span>}
+                  {isFailed && (
+                    <span style={{ marginLeft: '8px', fontSize: '10px', color: '#dc3545' }}>Failed</span>
+                  )}
+                </label>
+              </div>
+            );
+          })}
           <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
             <span style={{color: '#dc3545'}}>★</span> indicates high priority layers
           </div>
