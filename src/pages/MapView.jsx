@@ -824,6 +824,7 @@
 // }
 
 // export default MapView;
+// MapView.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -895,6 +896,7 @@ function MapView() {
     recreational_areas: '#7f8c8d',
   };
 
+  // ✅ Always clean base URL (no trailing slash)
   const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
   const lastBoundsKeyRef = useRef(null);
 
@@ -922,9 +924,9 @@ function MapView() {
         setLoading(true);
         setError('');
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/api/spatial/geojson/${layer}`;
-        if (!API_BASE) url = `/api/spatial/geojson/${layer}`;
 
+        // ✅ FIX: Correct URL building
+        const url = `${API_BASE}/api/spatial/geojson/${layer}`;
         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
 
         const resp = await axios.get(url, {
@@ -957,8 +959,9 @@ function MapView() {
     (async () => {
       try {
         const token = localStorage.getItem('token');
-        let url = `${API_BASE}/api/spatial/geojson/${selectedType}`;
-        if (!API_BASE) url = `/api/spatial/geojson/${selectedType}`;
+
+        // ✅ FIX: Correct URL building
+        const url = `${API_BASE}/api/spatial/geojson/${selectedType}`;
 
         const resp = await axios.get(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
