@@ -2936,6 +2936,30 @@ const getLayerPriority = (layer) => {
   return priorityMap[layer] || 5;
 };
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+  
+  componentDidCatch(error, errorInfo) {
+    console.error('Map component error:', error, errorInfo);
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <div style={{ padding: '20px', textAlign: 'center' }}>Map component encountered an error. Please refresh the page.</div>;
+    }
+    
+    return this.props.children;
+  }
+}
+
 // ------------------------
 // MapView Page
 // ------------------------
@@ -2967,6 +2991,7 @@ function MapView() {
   const lastBoundsKeyRef = useRef(null);
   const lastZoomRef = useRef(currentZoom);
   const failedRequests = useRef(new Set());
+  const lastFetchRef = useRef(0);
 
   // Use ref for the debounced function to maintain stability across renders
   const fetchGeoByBboxRef = useRef(null);
@@ -3255,7 +3280,21 @@ function MapView() {
 
   // Create debounced version of fetchGeoByBbox
   useEffect(() => {
-    fetchGeoByBboxRef.current = debounce(fetchGeoByBbox, 800);
+    const debouncedFetch = debounce(fetchGeoByBbox, 800);
+    fetchGeoByBboxRef.current = (...args) => {
+      try {
+        debouncedFetch(...args);
+      } catch (error) {
+        console.error('Error in debounced fetch:', error);
+      }
+    };
+    
+    // Cleanup function to cancel any pending debounced calls
+    return () => {
+      if (fetchGeoByBboxRef.current && fetchGeoByBboxRef.current.cancel) {
+        fetchGeoByBboxRef.current.cancel();
+      }
+    };
   }, [fetchGeoByBbox]);
 
   // ------------------------
@@ -3341,17 +3380,30 @@ function MapView() {
   // ------------------------
   // Bounds and zoom change handler
   // ------------------------
-  const handleMapChange = (bounds, zoomLevel) => {
+  const handleMapChange = useCallback((bounds, zoomLevel) => {
     setCurrentZoom(zoomLevel);
     
-    if (selectedLayers.size > 0 && bounds && fetchGeoByBboxRef.current) {
-      // Only refetch if zoom level changes significantly to prevent distortion
-      if (Math.abs(zoomLevel - lastZoomRef.current) > 1) {
-        lastZoomRef.current = zoomLevel;
-        fetchGeoByBboxRef.current(selectedLayers, bounds, zoomLevel);
+    // Add null/undefined checks
+    if (!bounds || !selectedLayers.size || !fetchGeoByBboxRef.current) return;
+    
+    // Only refetch if zoom level changes significantly to prevent distortion
+    if (Math.abs(zoomLevel - lastZoomRef.current) > 1) {
+      lastZoomRef.current = zoomLevel;
+      
+      // Use a simple throttle instead of debounce to prevent function reference issues
+      const now = Date.now();
+      if (!lastFetchRef.current || now - lastFetchRef.current > 1000) {
+        lastFetchRef.current = now;
+        
+        // Add try-catch to prevent unhandled errors
+        try {
+          fetchGeoByBboxRef.current(selectedLayers, bounds, zoomLevel);
+        } catch (error) {
+          console.error('Error in map change handler:', error);
+        }
       }
     }
-  };
+  }, [selectedLayers]);
 
   // ------------------------
   // Handle data quality change
@@ -3726,14 +3778,16 @@ function MapView() {
       </div>
 
       <div style={rightStyle}>
-        <MapComponent
-          spatialData={displayData}
-          initialCenter={[-6.764538, 39.214464]}
-          onMapChange={handleMapChange}
-          layerColors={layerColors}
-          highlightedFeatures={filteredFeatures}
-          currentZoom={currentZoom}
-        />
+        <ErrorBoundary>
+          <MapComponent
+            spatialData={displayData}
+            initialCenter={[-6.764538, 39.214464]}
+            onMapChange={handleMapChange}
+            layerColors={layerColors}
+            highlightedFeatures={filteredFeatures}
+            currentZoom={currentZoom}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );
