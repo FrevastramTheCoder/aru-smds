@@ -2163,13 +2163,11 @@ const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => 
       clearTimeout(timeoutId);
       return response;
     } catch (error) {
-      // Don't retry on 404 - the resource doesn't exist
       if (error.response?.status === 404) {
         console.warn(`Resource not found: ${url}`);
         throw error;
       }
       
-      // Handle rate limiting (429)
       if (error.response?.status === 429) {
         const retryAfter = error.response.headers['retry-after'] || 5;
         console.warn(`Rate limited. Retrying after ${retryAfter} seconds...`);
@@ -2255,13 +2253,13 @@ function MapView() {
   const [availableEndpoints, setAvailableEndpoints] = useState({});
   const [customColors, setCustomColors] = useState({});
   const [showColorPicker, setShowColorPicker] = useState(null);
-  
+
   const location = useLocation();
   const navigate = useNavigate();
 
   // Cache implementation
   const spatialCache = useLocalStorageCache('spatial-data-cache', 86400000);
-  const colorCache = useLocalStorageCache('layer-colors', 86400000 * 30); // 30 days
+  const colorCache = useLocalStorageCache('layer-colors', 86400000 * 30);
   const spatialDataCache = useRef(new Map());
   const lastBoundsKeyRef = useRef(null);
 
@@ -2332,14 +2330,12 @@ function MapView() {
     aru_boundary: '#000000'
   };
 
-  // Get the current color for a layer (custom or default)
-  const getLayerColor = (layer) => {
+  // Get the current color for a layer
+  const getLayerColor = useCallback((layer) => {
     return customColors[layer] || defaultLayerColors[layer];
-  };
+  }, [customColors]);
 
-  // ------------------------
   // Check authentication on component mount
-  // ------------------------
   useEffect(() => {
     const token = localStorage.getItem('token');
     
@@ -2356,25 +2352,20 @@ function MapView() {
       return;
     }
 
-    // Load cached data on mount
     const cachedData = spatialCache.get();
     if (cachedData) {
       setSpatialData(cachedData);
     }
 
-    // Load custom colors
     const savedColors = colorCache.get();
     if (savedColors) {
       setCustomColors(savedColors);
     }
 
-    // Validate which endpoints are available
     validateEndpoints();
   }, [navigate]);
 
-  // ------------------------
   // Validate API endpoints
-  // ------------------------
   const validateEndpoints = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
@@ -2383,7 +2374,6 @@ function MapView() {
     
     for (const [key, url] of Object.entries(API_ENDPOINTS)) {
       try {
-        // Use HEAD request to check if endpoint exists without loading data
         await axios.head(url, {
           headers: { 'Authorization': `Bearer ${token}` },
           timeout: 5000
@@ -2399,15 +2389,12 @@ function MapView() {
     localStorage.setItem('availableEndpoints', JSON.stringify(endpoints));
   };
 
-  // ------------------------
   // Initialize layer from URL query
-  // ------------------------
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const category = params.get('category');
     const type = category ? (categoryToTypeMap[category] || 'buildings') : 'buildings';
     
-    // Check if the layer is available before selecting it
     const available = availableEndpoints[type] !== false;
     if (available) {
       setSelectedType(type);
@@ -2418,9 +2405,7 @@ function MapView() {
     }
   }, [location, availableEndpoints]);
 
-  // ------------------------
   // Calculate map statistics
-  // ------------------------
   useEffect(() => {
     const stats = {};
     Object.entries(spatialData).forEach(([layer, features]) => {
@@ -2442,9 +2427,7 @@ function MapView() {
     setMapStats(stats);
   }, [spatialData]);
 
-  // ------------------------
   // Apply search filter
-  // ------------------------
   useEffect(() => {
     if (!searchQuery) {
       setFilteredFeatures({});
@@ -2463,9 +2446,7 @@ function MapView() {
     setFilteredFeatures(filtered);
   }, [searchQuery, spatialData]);
 
-  // ------------------------
   // Apply property filters
-  // ------------------------
   useEffect(() => {
     if (Object.keys(activeFilters).length === 0) {
       setFilteredFeatures({});
@@ -2486,9 +2467,7 @@ function MapView() {
     setFilteredFeatures(filtered);
   }, [activeFilters, spatialData]);
 
-  // ------------------------
-  // Fetch GeoJSON by bounding box for multiple layers
-  // ------------------------
+  // Fetch GeoJSON by bounding box
   const fetchGeoByBbox = useCallback(
     debounce(async (layers, bounds, simplify = 0.0001) => {
       if (!layers || layers.size === 0 || !bounds) return;
@@ -2514,7 +2493,6 @@ function MapView() {
         const newSpatialData = { ...spatialData };
 
         for (const layer of layers) {
-          // Skip if endpoint is not available
           if (availableEndpoints[layer] === false) {
             console.warn(`Skipping ${layer} - endpoint not available`);
             newSpatialData[layer] = [];
@@ -2534,17 +2512,14 @@ function MapView() {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
               },
-              // Use a very small simplify value to preserve shape details
-              params: { bbox, simplify: 0.00001 }, // Reduced from 0.0001 to preserve shapes
+              params: { bbox, simplify: 0.00001 },
             }, 2, 30000);
 
             const fc = resp.data || { type: 'FeatureCollection', features: [] };
             const features = Array.isArray(fc.features) ? fc.features : [];
             
-            // Process features to ensure they have proper geometry
             const processedFeatures = features.map(feature => {
               if (feature.geometry && feature.geometry.type === 'Polygon') {
-                // Ensure polygons have proper winding order
                 return ensurePolygonWindingOrder(feature);
               }
               return feature;
@@ -2553,7 +2528,6 @@ function MapView() {
             newSpatialData[layer] = processedFeatures;
             spatialDataCache.current.set(cacheKey, processedFeatures);
             
-            // Remove from failed layers if previously failed
             setFailedLayers(prev => {
               const newSet = new Set(prev);
               newSet.delete(layer);
@@ -2563,7 +2537,6 @@ function MapView() {
             console.error(`Error fetching geojson for ${layer}:`, err);
             newSpatialData[layer] = [];
             
-            // Add to failed layers
             setFailedLayers(prev => new Set([...prev, layer]));
             
             if (err.response?.status === 401) {
@@ -2572,7 +2545,6 @@ function MapView() {
               navigate('/login');
               break;
             } else if (err.response?.status === 404) {
-              // Mark endpoint as unavailable
               setAvailableEndpoints(prev => ({ ...prev, [layer]: false }));
             }
           }
@@ -2592,27 +2564,23 @@ function MapView() {
     [navigate, spatialData, availableEndpoints]
   );
 
-  // Helper function to ensure proper polygon winding order
+  // Ensure proper polygon winding order
   const ensurePolygonWindingOrder = (feature) => {
     if (!feature.geometry || feature.geometry.type !== 'Polygon') return feature;
     
     try {
       const coordinates = feature.geometry.coordinates;
-      // Ensure exterior ring is counter-clockwise
       if (coordinates.length > 0 && coordinates[0].length >= 3) {
         const area = calculatePolygonArea(coordinates[0]);
         if (area > 0) {
-          // Positive area means clockwise, so reverse it
           coordinates[0] = coordinates[0].reverse();
         }
       }
       
-      // Ensure interior rings (holes) are clockwise
       for (let i = 1; i < coordinates.length; i++) {
         if (coordinates[i].length >= 3) {
           const area = calculatePolygonArea(coordinates[i]);
           if (area < 0) {
-            // Negative area means counter-clockwise, so reverse it
             coordinates[i] = coordinates[i].reverse();
           }
         }
@@ -2631,7 +2599,6 @@ function MapView() {
     }
   };
 
-  // Helper function to calculate polygon area (determines winding order)
   const calculatePolygonArea = (coordinates) => {
     let area = 0;
     const n = coordinates.length;
@@ -2645,9 +2612,7 @@ function MapView() {
     return area / 2;
   };
 
-  // ------------------------
-  // Initial full-layer fetch for selected layers
-  // ------------------------
+  // Initial full-layer fetch
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token || !checkTokenValidity(token)) {
@@ -2664,7 +2629,6 @@ function MapView() {
         const newSpatialData = { ...spatialData };
 
         for (const layer of selectedLayers) {
-          // Skip if endpoint is not available
           if (availableEndpoints[layer] === false) {
             console.warn(`Skipping ${layer} - endpoint not available`);
             newSpatialData[layer] = [];
@@ -2678,17 +2642,14 @@ function MapView() {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
               },
-              // Use a very small simplify value to preserve shape details
-              params: { simplify: 0.00001 }, // Reduced from 0.0005 to preserve shapes
+              params: { simplify: 0.00001 },
             }, 2, 30000);
 
             const fc = resp.data || { type: 'FeatureCollection', features: [] };
             const features = Array.isArray(fc.features) ? fc.features : [];
             
-            // Process features to ensure they have proper geometry
             const processedFeatures = features.map(feature => {
               if (feature.geometry && feature.geometry.type === 'Polygon') {
-                // Ensure polygons have proper winding order
                 return ensurePolygonWindingOrder(feature);
               }
               return feature;
@@ -2696,7 +2657,6 @@ function MapView() {
             
             newSpatialData[layer] = processedFeatures;
             
-            // Remove from failed layers if previously failed
             setFailedLayers(prev => {
               const newSet = new Set(prev);
               newSet.delete(layer);
@@ -2706,7 +2666,6 @@ function MapView() {
             console.warn(`Initial fetch failed for ${layer}:`, err);
             newSpatialData[layer] = [];
             
-            // Add to failed layers
             setFailedLayers(prev => new Set([...prev, layer]));
             
             if (err.response?.status === 401) {
@@ -2715,7 +2674,6 @@ function MapView() {
               navigate('/login');
               break;
             } else if (err.response?.status === 404) {
-              // Mark endpoint as unavailable
               setAvailableEndpoints(prev => ({ ...prev, [layer]: false }));
             }
           }
@@ -2732,9 +2690,7 @@ function MapView() {
     })();
   }, [selectedLayers, navigate]);
 
-  // ------------------------
   // Export functionality
-  // ------------------------
   const exportData = async (format = 'geojson') => {
     setIsExporting(true);
     setExportProgress(0);
@@ -2754,7 +2710,6 @@ function MapView() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       } else if (format === 'csv') {
-        // Simple CSV export implementation
         let csvContent = 'Layer,Feature Count\n';
         Object.entries(dataToExport).forEach(([layer, features]) => {
           csvContent += `${layer},${features.length}\n`;
@@ -2783,9 +2738,7 @@ function MapView() {
     }
   };
 
-  // ------------------------
   // Filter handlers
-  // ------------------------
   const handleFilterChange = (layer, property, value, checked) => {
     setActiveFilters(prev => {
       const newFilters = { ...prev };
@@ -2809,20 +2762,15 @@ function MapView() {
     setSearchQuery('');
   };
 
-  // ------------------------
   // Bounds change handler
-  // ------------------------
   const handleBoundsChange = (bounds) => {
     if (selectedLayers.size > 0) {
-      fetchGeoByBbox(selectedLayers, bounds, 0.00001); // Reduced simplify value
+      fetchGeoByBbox(selectedLayers, bounds, 0.00001);
     }
   };
 
-  // ------------------------
   // Handle layer selection change
-  // ------------------------
   const handleLayerToggle = (layerKey) => {
-    // Don't select unavailable layers
     if (availableEndpoints[layerKey] === false) {
       setError(`Layer "${layerKey}" is not available on the server`);
       return;
@@ -2839,11 +2787,8 @@ function MapView() {
     });
   };
 
-  // ------------------------
   // Handle single layer selection
-  // ------------------------
   const handleSingleLayerSelect = (layerKey) => {
-    // Don't select unavailable layers
     if (availableEndpoints[layerKey] === false) {
       setError(`Layer "${layerKey}" is not available on the server`);
       return;
@@ -2853,38 +2798,30 @@ function MapView() {
     setSelectedType(layerKey);
   };
 
-  // ------------------------
   // Handle color change
-  // ------------------------
-  const handleColorChange = (layer, color) => {
+  const handleColorChange = useCallback((layer, color) => {
     const newColors = { ...customColors, [layer]: color };
     setCustomColors(newColors);
     colorCache.set(newColors);
     setShowColorPicker(null);
-  };
+  }, [customColors, colorCache]);
 
-  // ------------------------
   // Reset color to default
-  // ------------------------
-  const resetColor = (layer) => {
+  const resetColor = useCallback((layer) => {
     const newColors = { ...customColors };
     delete newColors[layer];
     setCustomColors(newColors);
     colorCache.set(newColors);
-  };
+  }, [customColors, colorCache]);
 
-  // ------------------------
   // Handle logout
-  // ------------------------
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('spatial-data-cache');
     navigate('/login');
   };
 
-  // ------------------------
   // Retry failed layers
-  // ------------------------
   const retryFailedLayers = () => {
     if (failedLayers.size === 0) return;
     
@@ -2892,27 +2829,9 @@ function MapView() {
       const newLayers = new Set([...prev, ...failedLayers]);
       return newLayers;
     });
-    
-    // This will trigger the useEffect that fetches data for selected layers
   };
 
-  // Close color picker when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (showColorPicker && !e.target.closest('.color-picker-container')) {
-        setShowColorPicker(null);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showColorPicker]);
-
-  // ------------------------
   // UI styles
-  // ------------------------
   const containerStyle = { display: 'flex', height: '90vh', gap: '16px' };
   const cardStyle = { 
     border: '1px solid #ddd', 
@@ -2946,12 +2865,6 @@ function MapView() {
 
   const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
   const totalFeatures = Object.values(displayData).reduce((sum, features) => sum + features.length, 0);
-
-  // Create layer colors object for MapComponent
-  const layerColors = {};
-  Object.keys(defaultLayerColors).forEach(layer => {
-    layerColors[layer] = getLayerColor(layer);
-  });
 
   return (
     <div style={containerStyle}>
@@ -3079,6 +2992,31 @@ function MapView() {
                 {loadingLayers.has(key) && <span style={{ marginLeft: '8px', color: '#007bff' }}>⏳</span>}
                 {mapStats[key] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[key].count})</span>}
               </label>
+              {/* Color Picker for each layer */}
+              <div style={{ marginLeft: '24px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="color"
+                  value={getLayerColor(key)}
+                  onChange={(e) => handleColorChange(key, e.target.value)}
+                  style={{ width: '30px', height: '20px', padding: '0', border: 'none' }}
+                  disabled={availableEndpoints[key] === false}
+                />
+                <button
+                  onClick={() => resetColor(key)}
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                  disabled={availableEndpoints[key] === false || !customColors[key]}
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -3089,66 +3027,18 @@ function MapView() {
         </div>
 
         <div style={{ marginTop: '16px' }}>
-          <h4>Legend & Color Customization</h4>
+          <h4>Legend</h4>
           {Object.entries(defaultLayerColors).map(([layer, defaultColor]) => (
             <div key={layer} style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
               <div 
-                className="color-picker-container"
                 style={{ 
                   width: '20px', 
                   height: '20px', 
                   backgroundColor: getLayerColor(layer), 
                   marginRight: '8px', 
-                  border: '1px solid #000',
-                  cursor: 'pointer',
-                  position: 'relative'
+                  border: '1px solid #000'
                 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowColorPicker(showColorPicker === layer ? null : layer);
-                }}
-              >
-                {showColorPicker === layer && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '25px',
-                    left: '0',
-                    zIndex: 1000,
-                    backgroundColor: 'white',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '5px'
-                  }}>
-                    <div style={{ fontSize: '12px', marginBottom: '5px' }}>Choose color for {layer}:</div>
-                    <input 
-                      type="color" 
-                      value={getLayerColor(layer)} 
-                      onChange={(e) => handleColorChange(layer, e.target.value)}
-                      style={{ width: '100%', height: '30px' }}
-                    />
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        resetColor(layer);
-                      }}
-                      style={{ 
-                        padding: '2px 5px', 
-                        fontSize: '10px', 
-                        backgroundColor: '#6c757d', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '2px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Reset to Default
-                    </button>
-                  </div>
-                )}
-              </div>
+              />
               <span>{layer.replace(/_/g, ' ').toUpperCase()}</span>
               {mapStats[layer] && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>({mapStats[layer].count})</span>}
             </div>
@@ -3191,7 +3081,6 @@ function MapView() {
           Clear All Layers
         </button>
 
-        {/* Cache Info */}
         <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
           <p>Data cached for offline use</p>
         </div>
@@ -3202,7 +3091,9 @@ function MapView() {
           spatialData={displayData}
           initialCenter={[-6.764538, 39.214464]}
           onBoundsChange={handleBoundsChange}
-          layerColors={layerColors}
+          layerColors={Object.fromEntries(
+            Object.keys(defaultLayerColors).map(layer => [layer, getLayerColor(layer)])
+          )}
           highlightedFeatures={filteredFeatures}
         />
       </div>
