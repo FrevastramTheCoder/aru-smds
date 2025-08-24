@@ -2732,13 +2732,17 @@ import axios from 'axios';
 import MapComponent from '../components/MapComponent';
 
 // ------------------------
-// Debounce helper
+// Fixed debounce helper with proper context handling
 // ------------------------
-function debounce(fn, wait) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), wait);
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
   };
 }
 
@@ -2964,6 +2968,9 @@ function MapView() {
   const lastZoomRef = useRef(currentZoom);
   const failedRequests = useRef(new Set());
 
+  // Use ref for the debounced function to maintain stability across renders
+  const fetchGeoByBboxRef = useRef(null);
+
   const categoryToTypeMap = {
     buildings: 'buildings',
     roads: 'roads',
@@ -3131,123 +3138,125 @@ function MapView() {
   // ------------------------
   // Fetch GeoJSON by bounding box for multiple layers with resource management
   // ------------------------
-  const fetchGeoByBbox = useCallback(
-    debounce(async (layers, bounds, zoomLevel) => {
-      if (!layers || layers.size === 0 || !bounds) return;
-      
-      const token = localStorage.getItem('token');
-      if (!token || !checkTokenValidity(token)) {
-        setError('Session expired. Please login again.');
-        localStorage.removeItem('token');
-        navigate('/login');
-        return;
+  const fetchGeoByBbox = useCallback(async (layers, bounds, zoomLevel) => {
+    if (!layers || layers.size === 0 || !bounds) return;
+    
+    const token = localStorage.getItem('token');
+    if (!token || !checkTokenValidity(token)) {
+      setError('Session expired. Please login again.');
+      localStorage.removeItem('token');
+      navigate('/login');
+      return;
+    }
+
+    const key = `${Array.from(layers).join('-')}-${bounds.getWest().toFixed(6)}-${bounds.getSouth().toFixed(6)}-${bounds.getEast().toFixed(6)}-${bounds.getNorth().toFixed(6)}-${zoomLevel}`;
+    if (lastBoundsKeyRef.current === key) return;
+    lastBoundsKeyRef.current = key;
+
+    try {
+      setLoading(true);
+      setError('');
+      setLoadingLayers(prev => new Set([...prev, ...layers]));
+
+      const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+      const newSpatialData = { ...spatialData };
+
+      // Determine simplification factor based on zoom level and quality setting
+      let simplify = 0;
+      if (simplificationEnabled) {
+        simplify = getSimplificationFactor(zoomLevel);
+        
+        // Adjust based on quality preference
+        if (dataQuality === 'high') {
+          simplify *= 0.5; // Less simplification for high quality
+        } else if (dataQuality === 'performance') {
+          simplify *= 2; // More simplification for performance
+        }
       }
 
-      const key = `${Array.from(layers).join('-')}-${bounds.getWest().toFixed(6)}-${bounds.getSouth().toFixed(6)}-${bounds.getEast().toFixed(6)}-${bounds.getNorth().toFixed(6)}-${zoomLevel}`;
-      if (lastBoundsKeyRef.current === key) return;
-      lastBoundsKeyRef.current = key;
-
-      try {
-        setLoading(true);
-        setError('');
-        setLoadingLayers(prev => new Set([...prev, ...layers]));
-
-        const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
-        const newSpatialData = { ...spatialData };
-
-        // Determine simplification factor based on zoom level and quality setting
-        let simplify = 0;
-        if (simplificationEnabled) {
-          simplify = getSimplificationFactor(zoomLevel);
-          
-          // Adjust based on quality preference
-          if (dataQuality === 'high') {
-            simplify *= 0.5; // Less simplification for high quality
-          } else if (dataQuality === 'performance') {
-            simplify *= 2; // More simplification for performance
-          }
+      // Sort layers by priority to load important ones first
+      const sortedLayers = sortLayersByPriority(layers);
+      
+      for (const layer of sortedLayers) {
+        // Skip layers that have recently failed multiple times
+        if (failedRequests.current.has(layer) && failedRequests.current.get(layer) >= 3) {
+          console.warn(`Skipping ${layer} due to repeated failures`);
+          continue;
         }
 
-        // Sort layers by priority to load important ones first
-        const sortedLayers = sortLayersByPriority(layers);
-        
-        for (const layer of sortedLayers) {
-          // Skip layers that have recently failed multiple times
-          if (failedRequests.current.has(layer) && failedRequests.current.get(layer) >= 3) {
-            console.warn(`Skipping ${layer} due to repeated failures`);
+        try {
+          const cacheKey = `${layer}-${bbox}-${simplify}-${zoomLevel}`;
+          if (spatialDataCache.current.has(cacheKey)) {
+            newSpatialData[layer] = spatialDataCache.current.get(cacheKey);
             continue;
           }
 
-          try {
-            const cacheKey = `${layer}-${bbox}-${simplify}-${zoomLevel}`;
-            if (spatialDataCache.current.has(cacheKey)) {
-              newSpatialData[layer] = spatialDataCache.current.get(cacheKey);
-              continue;
-            }
+          const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
+          const resp = await fetchWithRetry(url, {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            params: { 
+              bbox, 
+              simplify: simplificationEnabled ? simplify : 0
+            },
+          }, 2, 45000);
 
-            const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
-            const resp = await fetchWithRetry(url, {
-              headers: { 
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              params: { 
-                bbox, 
-                simplify: simplificationEnabled ? simplify : 0
-              },
-            }, 2, 45000);
-
-            let fc = resp.data || { type: 'FeatureCollection', features: [] };
-            let features = Array.isArray(fc.features) ? fc.features : [];
-            
-            // Apply client-side geometry protection to prevent distortion
-            features = preventGeometryDistortion(features, zoomLevel);
-            
-            newSpatialData[layer] = features;
-            spatialDataCache.current.set(cacheKey, features);
-            
-            // Reset failure count on success
-            if (failedRequests.current.has(layer)) {
-              failedRequests.current.delete(layer);
-            }
-          } catch (err) {
-            console.error(`Error fetching geojson for ${layer}:`, err);
-            newSpatialData[layer] = spatialData[layer] || [];
-            
-            // Track failed requests
-            const failCount = failedRequests.current.get(layer) || 0;
-            failedRequests.current.set(layer, failCount + 1);
-            
-            if (err.response?.status === 401) {
-              setError('Authentication failed. Please login again.');
-              localStorage.removeItem('token');
-              navigate('/login');
-              break;
-            } else if (err.response?.status === 404) {
-              console.warn(`Layer "${layer}" not found on server.`);
-            } else if (err.code === 'ERR_NETWORK' || err.message.includes('INSUFFICIENT_RESOURCES')) {
-              setResourceWarning(true);
-              setTimeout(() => setResourceWarning(false), 5000);
-            }
-          }
+          let fc = resp.data || { type: 'FeatureCollection', features: [] };
+          let features = Array.isArray(fc.features) ? fc.features : [];
           
-          // Add a small delay between layer requests to reduce server load
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Apply client-side geometry protection to prevent distortion
+          features = preventGeometryDistortion(features, zoomLevel);
+          
+          newSpatialData[layer] = features;
+          spatialDataCache.current.set(cacheKey, features);
+          
+          // Reset failure count on success
+          if (failedRequests.current.has(layer)) {
+            failedRequests.current.delete(layer);
+          }
+        } catch (err) {
+          console.error(`Error fetching geojson for ${layer}:`, err);
+          newSpatialData[layer] = spatialData[layer] || [];
+          
+          // Track failed requests
+          const failCount = failedRequests.current.get(layer) || 0;
+          failedRequests.current.set(layer, failCount + 1);
+          
+          if (err.response?.status === 401) {
+            setError('Authentication failed. Please login again.');
+            localStorage.removeItem('token');
+            navigate('/login');
+            break;
+          } else if (err.response?.status === 404) {
+            console.warn(`Layer "${layer}" not found on server.`);
+          } else if (err.code === 'ERR_NETWORK' || err.message.includes('INSUFFICIENT_RESOURCES')) {
+            setResourceWarning(true);
+            setTimeout(() => setResourceWarning(false), 5000);
+          }
         }
-
-        setSpatialData(newSpatialData);
-        spatialCache.set(newSpatialData);
         
-      } catch (err) {
-        console.error('Error fetching geojson by bbox:', err);
-        setError('Failed to load features for current view');
-      } finally {
-        setLoading(false);
-        setLoadingLayers(new Set());
+        // Add a small delay between layer requests to reduce server load
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-    }, 800), // Increased debounce time to reduce requests
-    [SPATIAL_API_BASE, navigate, spatialData, simplificationEnabled, dataQuality, spatialCache]
-  );
+
+      setSpatialData(newSpatialData);
+      spatialCache.set(newSpatialData);
+      
+    } catch (err) {
+      console.error('Error fetching geojson by bbox:', err);
+      setError('Failed to load features for current view');
+    } finally {
+      setLoading(false);
+      setLoadingLayers(new Set());
+    }
+  }, [SPATIAL_API_BASE, navigate, spatialData, simplificationEnabled, dataQuality, spatialCache]);
+
+  // Create debounced version of fetchGeoByBbox
+  useEffect(() => {
+    fetchGeoByBboxRef.current = debounce(fetchGeoByBbox, 800);
+  }, [fetchGeoByBbox]);
 
   // ------------------------
   // Initial full-layer fetch for selected layers with resource management
@@ -3335,11 +3344,11 @@ function MapView() {
   const handleMapChange = (bounds, zoomLevel) => {
     setCurrentZoom(zoomLevel);
     
-    if (selectedLayers.size > 0 && bounds) {
+    if (selectedLayers.size > 0 && bounds && fetchGeoByBboxRef.current) {
       // Only refetch if zoom level changes significantly to prevent distortion
       if (Math.abs(zoomLevel - lastZoomRef.current) > 1) {
         lastZoomRef.current = zoomLevel;
-        fetchGeoByBbox(selectedLayers, bounds, zoomLevel);
+        fetchGeoByBboxRef.current(selectedLayers, bounds, zoomLevel);
       }
     }
   };
@@ -3674,7 +3683,7 @@ function MapView() {
           <div style={{ 
             padding: '10px', 
             backgroundColor: '#ffebee', 
-            border: '1px solid #f44336', 
+            border: '1px solid '#f44336', 
             borderRadius: '4px', 
             margin: '10px 0' 
           }}>
