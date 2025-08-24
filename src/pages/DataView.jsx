@@ -145,7 +145,7 @@ function DataView() {
       <div style={controlsStyle}>
         <input type="text" placeholder="Query data here..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={inputStyle} />
         <button onClick={executeQuery} style={buttonStyle("#22c55e")}>Search</button>
-        <button onClick={() => navigate("/mapview")} style={buttonStyle("#f59e0b")}>View Map</button>
+        <button onClick={() => navigate("/map")} style={buttonStyle("#f59e0b")}>View Map</button>
         <button onClick={exportCSV} style={buttonStyle("#2563eb")}>Export CSV</button>
         <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>Export JSON</button>
         <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>Export XLSX</button>
