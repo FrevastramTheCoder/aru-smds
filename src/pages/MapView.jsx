@@ -826,7 +826,7 @@
 // export default MapView;
 // MapView.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import MapComponent from '../components/MapComponent';
 
@@ -842,6 +842,21 @@ function debounce(fn, wait) {
 }
 
 // ------------------------
+// Token validation helper
+// ------------------------
+const checkTokenValidity = (token) => {
+  if (!token) return false;
+  
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const isExpired = payload.exp * 1000 < Date.now();
+    return !isExpired;
+  } catch {
+    return false;
+  }
+};
+
+// ------------------------
 // MapView Page
 // ------------------------
 function MapView() {
@@ -850,6 +865,7 @@ function MapView() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const categoryToTypeMap = {
     buildings: 'buildings',
@@ -901,6 +917,27 @@ function MapView() {
   const lastBoundsKeyRef = useRef(null);
 
   // ------------------------
+  // Check authentication on component mount
+  // ------------------------
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    console.log('Token from localStorage:', token);
+    
+    if (!token) {
+      setError('No authentication token found. Please login again.');
+      navigate('/login');
+      return;
+    }
+    
+    if (!checkTokenValidity(token)) {
+      setError('Session expired. Please login again.');
+      localStorage.removeItem('token');
+      navigate('/login');
+      return;
+    }
+  }, [navigate]);
+
+  // ------------------------
   // Initialize layer from URL query
   // ------------------------
   useEffect(() => {
@@ -916,6 +953,15 @@ function MapView() {
   const fetchGeoByBbox = useCallback(
     debounce(async (layer, bounds, simplify = 0.0001) => {
       if (!layer || !bounds) return;
+      
+      const token = localStorage.getItem('token');
+      if (!token || !checkTokenValidity(token)) {
+        setError('Session expired. Please login again.');
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+
       const key = `${layer}-${bounds.getWest().toFixed(6)}-${bounds.getSouth().toFixed(6)}-${bounds.getEast().toFixed(6)}-${bounds.getNorth().toFixed(6)}`;
       if (lastBoundsKeyRef.current === key) return;
       lastBoundsKeyRef.current = key;
@@ -923,14 +969,17 @@ function MapView() {
       try {
         setLoading(true);
         setError('');
-        const token = localStorage.getItem('token');
-
-        // ✅ FIX: Correct URL building
+        
         const url = `${API_BASE}/api/spatial/geojson/${layer}`;
         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
 
+        console.log('Requesting URL:', `${url}?bbox=${bbox}&simplify=${simplify}`);
+
         const resp = await axios.get(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
           params: { bbox, simplify },
           timeout: 30000,
         });
@@ -939,32 +988,51 @@ function MapView() {
         setSpatialData((prev) => ({ ...prev, [layer]: Array.isArray(fc.features) ? fc.features : [] }));
       } catch (err) {
         console.error('Error fetching geojson by bbox:', err);
-        setError('Failed to load features for current view');
+        
+        if (err.response?.status === 401) {
+          setError('Authentication failed. Please login again.');
+          localStorage.removeItem('token');
+          navigate('/login');
+        } else if (err.response?.status === 403) {
+          setError('Access denied. Invalid permissions.');
+        } else if (err.response?.status === 404) {
+          setError('Data not found for this layer.');
+        } else {
+          setError('Failed to load features for current view');
+        }
+        
         setSpatialData((prev) => ({ ...prev, [layer]: [] }));
       } finally {
         setLoading(false);
       }
     }, 350),
-    [API_BASE]
+    [API_BASE, navigate]
   );
 
   // ------------------------
   // Initial full-layer fetch
   // ------------------------
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !checkTokenValidity(token)) {
+      navigate('/login');
+      return;
+    }
+
     setSpatialData({});
     setError('');
     setLoading(true);
 
     (async () => {
       try {
-        const token = localStorage.getItem('token');
-
-        // ✅ FIX: Correct URL building
         const url = `${API_BASE}/api/spatial/geojson/${selectedType}`;
+        console.log('Initial fetch URL:', url);
 
         const resp = await axios.get(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
           params: { simplify: 0.0005 },
           timeout: 30000,
         });
@@ -973,16 +1041,30 @@ function MapView() {
         setSpatialData({ [selectedType]: Array.isArray(fc.features) ? fc.features : [] });
       } catch (err) {
         console.warn('Initial whole-layer fetch failed:', err);
+        
+        if (err.response?.status === 401) {
+          setError('Authentication failed. Please login again.');
+          localStorage.removeItem('token');
+          navigate('/login');
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [selectedType, API_BASE]);
+  }, [selectedType, API_BASE, navigate]);
 
   // ------------------------
   // Bounds change handler
   // ------------------------
   const handleBoundsChange = (bounds) => fetchGeoByBbox(selectedType, bounds, 0.00012);
+
+  // ------------------------
+  // Handle logout
+  // ------------------------
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
 
   // ------------------------
   // UI styles
@@ -991,14 +1073,36 @@ function MapView() {
   const cardStyle = { border: '1px solid #ddd', borderRadius: '8px', padding: '16px', backgroundColor: '#f9f9f9', height: '100%', overflowY: 'auto' };
   const leftStyle = { width: '300px', ...cardStyle };
   const rightStyle = { flex: 1, ...cardStyle, padding: 0 };
-  const buttonStyle = { padding: '8px 12px', margin: '4px 0', width: '100%', borderRadius: '4px', border: 'none', backgroundColor: '#007bff', color: '#fff', cursor: 'pointer' };
+  const buttonStyle = { padding: '8px 12px', margin: '4px 0', width: '100%', borderRadius: '4px', border: 'none', color: '#fff', cursor: 'pointer' };
 
   return (
     <div style={containerStyle}>
       <div style={leftStyle}>
-        <h2>Layers / Elements</h2>
-        <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '12px' }}>
-          {dataTypes.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0 }}>Layers / Elements</h2>
+          <button 
+            onClick={handleLogout}
+            style={{ 
+              padding: '6px 12px', 
+              backgroundColor: '#dc3545', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '4px', 
+              cursor: 'pointer' 
+            }}
+          >
+            Logout
+          </button>
+        </div>
+
+        <select 
+          value={selectedType} 
+          onChange={(e) => setSelectedType(e.target.value)} 
+          style={{ width: '100%', padding: '8px', marginBottom: '12px' }}
+        >
+          {dataTypes.map(({ key, label }) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
         </select>
 
         <div><p><b>Selected Layer:</b> {selectedType}</p></div>
@@ -1013,11 +1117,25 @@ function MapView() {
           ))}
         </div>
 
-        {loading && <p>Loading...</p>}
-        {error && <p style={{ color: 'red' }}>{error}</p>}
+        {loading && <p>Loading map data...</p>}
+        {error && (
+          <div style={{ 
+            padding: '10px', 
+            backgroundColor: '#ffebee', 
+            border: '1px solid #f44336', 
+            borderRadius: '4px', 
+            margin: '10px 0' 
+          }}>
+            <p style={{ color: '#d32f2f', margin: 0 }}>{error}</p>
+          </div>
+        )}
 
-        <button style={buttonStyle} onClick={() => alert('Export functionality here')}>Export Layer</button>
-        <button style={{ ...buttonStyle, backgroundColor: '#28a745' }} onClick={() => alert('Other action')}>Other Action</button>
+        <button style={{ ...buttonStyle, backgroundColor: '#007bff' }} onClick={() => alert('Export functionality here')}>
+          Export Layer
+        </button>
+        <button style={{ ...buttonStyle, backgroundColor: '#28a745' }} onClick={() => alert('Other action')}>
+          Other Action
+        </button>
       </div>
 
       <div style={rightStyle}>
