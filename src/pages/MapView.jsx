@@ -912,8 +912,8 @@ function MapView() {
     recreational_areas: '#7f8c8d',
   };
 
-  // ✅ Always clean base URL (no trailing slash)
-  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  // ✅ Use the correct environment variable for spatial API
+  const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
   const lastBoundsKeyRef = useRef(null);
 
   // ------------------------
@@ -970,10 +970,11 @@ function MapView() {
         setLoading(true);
         setError('');
         
-        const url = `${API_BASE}/api/spatial/geojson/${layer}`;
+        // ✅ CORRECTED: Use spatial API base
+        const url = `${SPATIAL_API_BASE}/geojson/${layer}`;
         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
 
-        console.log('Requesting URL:', `${url}?bbox=${bbox}&simplify=${simplify}`);
+        console.log('Requesting spatial data from:', `${url}?bbox=${bbox}&simplify=${simplify}`);
 
         const resp = await axios.get(url, {
           headers: { 
@@ -1006,7 +1007,7 @@ function MapView() {
         setLoading(false);
       }
     }, 350),
-    [API_BASE, navigate]
+    [SPATIAL_API_BASE, navigate]
   );
 
   // ------------------------
@@ -1025,8 +1026,9 @@ function MapView() {
 
     (async () => {
       try {
-        const url = `${API_BASE}/api/spatial/geojson/${selectedType}`;
-        console.log('Initial fetch URL:', url);
+        // ✅ CORRECTED: Use spatial API base
+        const url = `${SPATIAL_API_BASE}/geojson/${selectedType}`;
+        console.log('Initial fetch from:', url);
 
         const resp = await axios.get(url, {
           headers: { 
@@ -1046,12 +1048,14 @@ function MapView() {
           setError('Authentication failed. Please login again.');
           localStorage.removeItem('token');
           navigate('/login');
+        } else if (err.response?.status === 404) {
+          setError(`Layer "${selectedType}" not found on server.`);
         }
       } finally {
         setLoading(false);
       }
     })();
-  }, [selectedType, API_BASE, navigate]);
+  }, [selectedType, SPATIAL_API_BASE, navigate]);
 
   // ------------------------
   // Bounds change handler
