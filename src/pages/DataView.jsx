@@ -993,13 +993,20 @@ function DataView() {
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  const fetchData = async (page = 1) => {
+  const fetchData = async (page = 1, elementType = "all") => {
     setLoading(true);
     try {
-      const res = await axios.get(
-        `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // Build the API URL with optional element type filter
+      let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
+      
+      // Add element type filter if a specific element is selected
+      if (elementType !== "all") {
+        url += `&elementType=${elementType}`;
+      }
+
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       if (res.data) {
         const rows = res.data.data.map((r) => {
@@ -1071,9 +1078,16 @@ function DataView() {
 
   useEffect(() => {
     if (layerName && token) {
-      fetchData();
+      fetchData(1, selectedElement);
     }
-  }, [layerName, limit, token]);
+  }, [layerName, limit, token, selectedElement]);
+
+  const handleElementChange = (elementType) => {
+    setSelectedElement(elementType);
+    setActiveTab(elementType);
+    // Reset to first page when changing element type
+    fetchData(1, elementType);
+  };
 
   const executeQuery = () => {
     setLoading(true);
@@ -1376,16 +1390,13 @@ function DataView() {
         <select
           id="elementSelector"
           value={selectedElement}
-          onChange={(e) => {
-            setSelectedElement(e.target.value);
-            setActiveTab(e.target.value);
-          }}
+          onChange={(e) => handleElementChange(e.target.value)}
           style={selectStyle}
         >
           <option value="all">All Elements</option>
-          {getAvailableElementTypes().map((type) => (
+          {dataTypes.map((type) => (
             <option key={type.key} value={type.key}>
-              {type.label} ({groupedData[type.key]?.length || 0})
+              {type.label}
             </option>
           ))}
         </select>
@@ -1408,23 +1419,17 @@ function DataView() {
       <div style={tabContainerStyle}>
         <div
           style={activeTab === "all" ? activeTabStyle : tabStyle}
-          onClick={() => {
-            setActiveTab("all");
-            setSelectedElement("all");
-          }}
+          onClick={() => handleElementChange("all")}
         >
           All Elements
         </div>
-        {getAvailableElementTypes().map((type) => (
+        {dataTypes.map((type) => (
           <div
             key={type.key}
             style={activeTab === type.key ? activeTabStyle : tabStyle}
-            onClick={() => {
-              setActiveTab(type.key);
-              setSelectedElement(type.key);
-            }}
+            onClick={() => handleElementChange(type.key)}
           >
-            {type.label} ({groupedData[type.key]?.length || 0})
+            {type.label}
           </div>
         ))}
       </div>
@@ -1441,7 +1446,7 @@ function DataView() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div style={paginationStyle}>
-          <button onClick={() => fetchData(currentPage - 1)} disabled={currentPage === 1} style={pageButtonStyle}>
+          <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
             Previous
           </button>
 
@@ -1460,7 +1465,7 @@ function DataView() {
             return (
               <button
                 key={pageNum}
-                onClick={() => fetchData(pageNum)}
+                onClick={() => fetchData(pageNum, selectedElement)}
                 style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
               >
                 {pageNum}
@@ -1468,7 +1473,7 @@ function DataView() {
             );
           })}
 
-          <button onClick={() => fetchData(currentPage + 1)} disabled={currentPage === totalPages} style={pageButtonStyle}>
+          <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
             Next
           </button>
 
