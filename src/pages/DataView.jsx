@@ -436,6 +436,7 @@ function DataView() {
   const [totalPages, setTotalPages] = useState(1);
   const [limit, setLimit] = useState(50);
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedElement, setSelectedElement] = useState("all"); // New state for dropdown selection
 
   const { layerName } = useParams();
   const token = localStorage.getItem("token");
@@ -610,7 +611,8 @@ function DataView() {
 
   // --- Export Functions ---
   const exportCSV = () => {
-    const dataToExport = Object.values(groupedData).flat().map((row) => {
+    // Use selected element data if a specific element is selected, otherwise use all data
+    const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       
       // Add all attributes as separate columns
@@ -628,13 +630,14 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_export.csv`;
+    a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
   const exportJSON = () => {
-    const dataToExport = Object.values(groupedData).flat().map((row) => {
+    // Use selected element data if a specific element is selected, otherwise use all data
+    const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id, attributes: row.attributes, geometry: row.geometry };
       return obj;
     });
@@ -642,13 +645,14 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_export.json`;
+    a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
   const exportXLSX = () => {
-    const dataToExport = Object.values(groupedData).flat().map((row) => {
+    // Use selected element data if a specific element is selected, otherwise use all data
+    const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       
       // Add all attributes as separate columns
@@ -664,7 +668,7 @@ function DataView() {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, layerName);
-    XLSX.writeFile(workbook, `${layerName}_export.xlsx`);
+    XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
   };
 
   // --- Inline CSS ---
@@ -685,6 +689,7 @@ function DataView() {
   const tabContainerStyle = { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" };
   const tabStyle = { padding: "10px 20px", borderRadius: 8, border: "1px solid #d1d5db", backgroundColor: "#f9fafb", cursor: "pointer" };
   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
+  const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
 
   // Function to render a table for a specific element type
   const renderElementTable = (elementType, elementData) => {
@@ -730,6 +735,15 @@ function DataView() {
         </table>
       </div>
     );
+  };
+
+  // Get the data to display based on selection
+  const getDataToDisplay = () => {
+    if (selectedElement === "all") {
+      return groupedData;
+    } else {
+      return { [selectedElement]: groupedData[selectedElement] || [] };
+    }
   };
 
   return (
@@ -780,6 +794,29 @@ function DataView() {
         </select>
       </div>
 
+      {/* Element type selector */}
+      <div style={{ marginBottom: 20 }}>
+        <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
+          Select Element Type:
+        </label>
+        <select
+          id="elementSelector"
+          value={selectedElement}
+          onChange={(e) => {
+            setSelectedElement(e.target.value);
+            setActiveTab(e.target.value);
+          }}
+          style={selectStyle}
+        >
+          <option value="all">All Elements</option>
+          {Object.keys(groupedData).map(type => (
+            <option key={type} value={type}>
+              {type} ({groupedData[type].length})
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Column toggle */}
       {columnOrder.length > 0 && (
         <div style={checkboxContainer}>
@@ -802,7 +839,10 @@ function DataView() {
       <div style={tabContainerStyle}>
         <div 
           style={activeTab === "all" ? activeTabStyle : tabStyle}
-          onClick={() => setActiveTab("all")}
+          onClick={() => {
+            setActiveTab("all");
+            setSelectedElement("all");
+          }}
         >
           All Elements
         </div>
@@ -810,7 +850,10 @@ function DataView() {
           <div 
             key={type}
             style={activeTab === type ? activeTabStyle : tabStyle}
-            onClick={() => setActiveTab(type)}
+            onClick={() => {
+              setActiveTab(type);
+              setSelectedElement(type);
+            }}
           >
             {type} ({groupedData[type].length})
           </div>
@@ -822,12 +865,10 @@ function DataView() {
         <div style={{ textAlign: "center", padding: 40 }}>
           Loading...
         </div>
-      ) : activeTab === "all" ? (
-        Object.entries(groupedData).map(([elementType, elementData]) => 
+      ) : Object.keys(getDataToDisplay()).length > 0 ? (
+        Object.entries(getDataToDisplay()).map(([elementType, elementData]) => 
           renderElementTable(elementType, elementData)
         )
-      ) : groupedData[activeTab] ? (
-        renderElementTable(activeTab, groupedData[activeTab])
       ) : (
         <div style={{ textAlign: "center", padding: 40 }}>
           No data found for this element type.
