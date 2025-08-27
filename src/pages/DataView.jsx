@@ -987,21 +987,38 @@ function DataView() {
   const [limit, setLimit] = useState(50);
   const [activeTab, setActiveTab] = useState("all");
   const [selectedElement, setSelectedElement] = useState("all");
+  const [error, setError] = useState(null);
 
   const { layerName } = useParams();
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
+  // Validate layerName before making API calls
+  const validateLayerName = () => {
+    if (!layerName || layerName === "undefined") {
+      setError("Invalid layer name. Please check the URL and try again.");
+      return false;
+    }
+    return true;
+  };
+
   const fetchData = async (page = 1, elementType = "all") => {
+    // Validate layerName before making request
+    if (!validateLayerName()) {
+      return;
+    }
+
     setLoading(true);
+    setError(null);
+    
     try {
-      // Build the API URL with optional element type filter
-      let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
+      // Build the API URL with proper validation
+      let url = `${API_BASE}/data/${encodeURIComponent(layerName)}?page=${page}&limit=${limit}`;
       
       // Add element type filter if a specific element is selected
-      if (elementType !== "all") {
-        url += `&elementType=${elementType}`;
+      if (elementType && elementType !== "all") {
+        url += `&elementType=${encodeURIComponent(elementType)}`;
       }
 
       const res = await axios.get(url, {
@@ -1069,7 +1086,16 @@ function DataView() {
         }
       }
     } catch (err) {
-      console.error(err);
+      console.error("API Error:", err);
+      if (err.response?.status === 400) {
+        setError("Invalid request. Please check your parameters and try again.");
+      } else if (err.response?.status === 401) {
+        setError("Authentication failed. Please log in again.");
+      } else if (err.response?.status === 404) {
+        setError("Layer not found. Please check the layer name.");
+      } else {
+        setError("Failed to fetch data. Please try again later.");
+      }
       toast.error("Failed to fetch data");
     } finally {
       setLoading(false);
@@ -1077,8 +1103,12 @@ function DataView() {
   };
 
   useEffect(() => {
-    if (layerName && token) {
-      fetchData(1, selectedElement);
+    if (token) {
+      if (validateLayerName()) {
+        fetchData(1, selectedElement);
+      }
+    } else {
+      setError("Authentication token not found. Please log in.");
     }
   }, [layerName, limit, token, selectedElement]);
 
@@ -1086,10 +1116,14 @@ function DataView() {
     setSelectedElement(elementType);
     setActiveTab(elementType);
     // Reset to first page when changing element type
-    fetchData(1, elementType);
+    if (validateLayerName()) {
+      fetchData(1, elementType);
+    }
   };
 
   const executeQuery = () => {
+    if (!validateLayerName()) return;
+    
     setLoading(true);
     const result =
       searchTerm.toLowerCase() === "all data"
@@ -1187,6 +1221,8 @@ function DataView() {
 
   // --- Export Functions ---
   const exportCSV = () => {
+    if (!validateLayerName()) return;
+    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       Object.entries(row.attributes || {}).forEach(([key, value]) => {
@@ -1207,6 +1243,8 @@ function DataView() {
   };
 
   const exportJSON = () => {
+    if (!validateLayerName()) return;
+    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       return { id: row.id, attributes: row.attributes, geometry: row.geometry, color: row.color };
     });
@@ -1220,6 +1258,8 @@ function DataView() {
   };
 
   const exportXLSX = () => {
+    if (!validateLayerName()) return;
+    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       Object.entries(row.attributes || {}).forEach(([key, value]) => {
@@ -1265,6 +1305,7 @@ function DataView() {
   const tabStyle = { padding: "10px 20px", borderRadius: 8, border: "1px solid #d1d5db", backgroundColor: "#f9fafb", cursor: "pointer" };
   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
   const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
+  const errorStyle = { backgroundColor: "#fee2e2", color: "#dc2626", padding: "15px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #fecaca" };
 
   // Function to render a table for a specific element type
   const renderElementTable = (elementType, elementData) => {
@@ -1325,16 +1366,25 @@ function DataView() {
     }
   };
 
-  // Get available element types from both the predefined list and the actual data
-  const getAvailableElementTypes = () => {
-    const availableTypes = new Set(Object.keys(groupedData));
-    return dataTypes.filter((dt) => availableTypes.has(dt.key));
-  };
-
   return (
     <div style={containerStyle}>
       <ToastContainer />
-      <h1 style={titleStyle}>Data View - {layerName}</h1>
+      <h1 style={titleStyle}>Data View - {layerName || "Unknown Layer"}</h1>
+
+      {/* Error Display */}
+      {error && (
+        <div style={errorStyle}>
+          <strong>Error:</strong> {error}
+          <div style={{ marginTop: "10px" }}>
+            <button 
+              onClick={() => window.location.reload()} 
+              style={buttonStyle("#dc2626")}
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Layer Info */}
       {Object.keys(layerInfo).length > 0 && (
@@ -1351,136 +1401,140 @@ function DataView() {
       )}
 
       {/* Controls */}
-      <div style={controlsStyle}>
-        <input
-          type="text"
-          placeholder="Search across all fields..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={inputStyle}
-          onKeyPress={(e) => e.key === "Enter" && executeQuery()}
-        />
-        <button onClick={executeQuery} style={buttonStyle("#22c55e")}>
-          Search
-        </button>
-        <button onClick={exportCSV} style={buttonStyle("#2563eb")}>
-          Export CSV
-        </button>
-        <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>
-          Export JSON
-        </button>
-        <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
-          Export XLSX
-        </button>
+      {!error && (
+        <>
+          <div style={controlsStyle}>
+            <input
+              type="text"
+              placeholder="Search across all fields..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={inputStyle}
+              onKeyPress={(e) => e.key === "Enter" && executeQuery()}
+            />
+            <button onClick={executeQuery} style={buttonStyle("#22c55e")}>
+              Search
+            </button>
+            <button onClick={exportCSV} style={buttonStyle("#2563eb")}>
+              Export CSV
+            </button>
+            <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>
+              Export JSON
+            </button>
+            <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
+              Export XLSX
+            </button>
 
-        {/* Page size selector */}
-        <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
-          <option value={10}>10 rows</option>
-          <option value={25}>25 rows</option>
-          <option value={50}>50 rows</option>
-          <option value={100}>100 rows</option>
-        </select>
-      </div>
-
-      {/* Element type selector */}
-      <div style={{ marginBottom: 20 }}>
-        <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
-          Select Element Type:
-        </label>
-        <select
-          id="elementSelector"
-          value={selectedElement}
-          onChange={(e) => handleElementChange(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="all">All Elements</option>
-          {dataTypes.map((type) => (
-            <option key={type.key} value={type.key}>
-              {type.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Column toggle */}
-      {columnOrder.length > 0 && (
-        <div style={checkboxContainer}>
-          <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
-          {columnOrder.map((col) => (
-            <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
-              <input type="checkbox" checked={visibleColumns[col] || false} onChange={() => toggleColumn(col)} style={{ marginRight: 6 }} />
-              {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-            </label>
-          ))}
-        </div>
-      )}
-
-      {/* Tabs for different element types */}
-      <div style={tabContainerStyle}>
-        <div
-          style={activeTab === "all" ? activeTabStyle : tabStyle}
-          onClick={() => handleElementChange("all")}
-        >
-          All Elements
-        </div>
-        {dataTypes.map((type) => (
-          <div
-            key={type.key}
-            style={activeTab === type.key ? activeTabStyle : tabStyle}
-            onClick={() => handleElementChange(type.key)}
-          >
-            {type.label}
+            {/* Page size selector */}
+            <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
+              <option value={10}>10 rows</option>
+              <option value={25}>25 rows</option>
+              <option value={50}>50 rows</option>
+              <option value={100}>100 rows</option>
+            </select>
           </div>
-        ))}
-      </div>
 
-      {/* Tables */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
-      ) : Object.keys(getDataToDisplay()).length > 0 ? (
-        Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
-      ) : (
-        <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
-      )}
+          {/* Element type selector */}
+          <div style={{ marginBottom: 20 }}>
+            <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
+              Select Element Type:
+            </label>
+            <select
+              id="elementSelector"
+              value={selectedElement}
+              onChange={(e) => handleElementChange(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="all">All Elements</option>
+              {dataTypes.map((type) => (
+                <option key={type.key} value={type.key}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={paginationStyle}>
-          <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
-            Previous
-          </button>
+          {/* Column toggle */}
+          {columnOrder.length > 0 && (
+            <div style={checkboxContainer}>
+              <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
+              {columnOrder.map((col) => (
+                <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
+                  <input type="checkbox" checked={visibleColumns[col] || false} onChange={() => toggleColumn(col)} style={{ marginRight: 6 }} />
+                  {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
+                </label>
+              ))}
+            </div>
+          )}
 
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum;
-            if (currentPage <= 3) {
-              pageNum = i + 1;
-            } else if (currentPage >= totalPages - 2) {
-              pageNum = totalPages - 4 + i;
-            } else {
-              pageNum = currentPage - 2 + i;
-            }
-
-            if (pageNum < 1 || pageNum > totalPages) return null;
-
-            return (
-              <button
-                key={pageNum}
-                onClick={() => fetchData(pageNum, selectedElement)}
-                style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
+          {/* Tabs for different element types */}
+          <div style={tabContainerStyle}>
+            <div
+              style={activeTab === "all" ? activeTabStyle : tabStyle}
+              onClick={() => handleElementChange("all")}
+            >
+              All Elements
+            </div>
+            {dataTypes.map((type) => (
+              <div
+                key={type.key}
+                style={activeTab === type.key ? activeTabStyle : tabStyle}
+                onClick={() => handleElementChange(type.key)}
               >
-                {pageNum}
+                {type.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Tables */}
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
+          ) : Object.keys(getDataToDisplay()).length > 0 ? (
+            Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
+          ) : (
+            <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={paginationStyle}>
+              <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
+                Previous
               </button>
-            );
-          })}
 
-          <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
-            Next
-          </button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
 
-          <span style={{ marginLeft: 10 }}>
-            Page {currentPage} of {totalPages}
-          </span>
-        </div>
+                if (pageNum < 1 || pageNum > totalPages) return null;
+
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => fetchData(pageNum, selectedElement)}
+                    style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+
+              <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
+                Next
+              </button>
+
+              <span style={{ marginLeft: 10 }}>
+                Page {currentPage} of {totalPages}
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
