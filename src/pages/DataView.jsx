@@ -928,1182 +928,14 @@
 
 //al
 
-// // export default DataView;
-// import React, { useEffect, useState } from "react";
-// import { useParams } from "react-router-dom";
-// import axios from "axios";
-// import { toast, ToastContainer } from "react-toastify";
-// import "react-toastify/dist/ReactToastify.css";
-// import * as XLSX from "xlsx";
-// import Papa from "papaparse";
-
-// // Predefined data types
-// const dataTypes = [
-//   { key: "buildings", label: "Buildings" },
-//   { key: "roads", label: "Roads" },
-//   { key: "footpaths", label: "Footpaths" },
-//   { key: "vegetation", label: "Vegetation" },
-//   { key: "parking", label: "Parking" },
-//   { key: "solid_waste", label: "Solid Waste" },
-//   { key: "electricity", label: "Electricity" },
-//   { key: "water_supply", label: "Water Supply" },
-//   { key: "drainage", label: "Drainage System" },
-//   { key: "vimbweta", label: "Vimbweta" },
-//   { key: "security", label: "Security Lights" },
-//   { key: "recreational_areas", label: "Recreational Areas" },
-//   { key: "aru_boundary", label: "Aru Boundary" },
-// ];
-
-// // Layer styles from DataManagement
-// const getLayerStyle = (name, type) => {
-//   const styles = {
-//     aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
-//     buildings: { color: "yellow", weight: 2, fillOpacity: 0.3 },
-//     roads: { color: "black", weight: 2, fillOpacity: 0.2 },
-//     footpaths: { color: "gray", weight: 2, fillOpacity: 0.2 },
-//     vegetation: { color: "green", weight: 2, fillOpacity: 0.3 },
-//     parking: { color: "purple", weight: 2, fillOpacity: 0.3 },
-//     solid_waste: { color: "darkblue", weight: 2, fillOpacity: 0.7 },
-//     electricity: { color: "khaki", weight: 2, fillOpacity: 0.3 },
-//     water_supply: { color: "blue", weight: 2, fillOpacity: 0.3 },
-//     drainage: { color: "gold", weight: 2, fillOpacity: 0.3 },
-//     vimbweta: { color: "orange", weight: 2, fillOpacity: 0.7 },
-//     security: { color: "magenta", weight: 2, fillOpacity: 0.3 },
-//     recreational_areas: { color: "yellowgreen", weight: 2, fillOpacity: 0.3 },
-//   };
-//   return styles[type] || { color: "gray", weight: 2, fillOpacity: 0.2 };
-// };
-
-// function DataView() {
-//   const [data, setData] = useState([]);
-//   const [groupedData, setGroupedData] = useState({});
-//   const [searchTerm, setSearchTerm] = useState("");
-//   const [loading, setLoading] = useState(false);
-//   const [expandedRows, setExpandedRows] = useState({});
-//   const [visibleColumns, setVisibleColumns] = useState({});
-//   const [columnOrder, setColumnOrder] = useState([]);
-//   const [layerInfo, setLayerInfo] = useState({});
-//   const [currentPage, setCurrentPage] = useState(1);
-//   const [totalPages, setTotalPages] = useState(1);
-//   const [limit, setLimit] = useState(50);
-//   const [activeTab, setActiveTab] = useState("all");
-//   const [selectedElement, setSelectedElement] = useState("all");
-
-//   const { layerName } = useParams();
-//   const token = localStorage.getItem("token");
-
-//   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
-
-//   const fetchData = async (page = 1, elementType = "all") => {
-//     setLoading(true);
-//     try {
-//       // Build the API URL with optional element type filter
-//       let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
-      
-//       // Add element type filter if a specific element is selected
-//       if (elementType !== "all") {
-//         url += `&elementType=${elementType}`;
-//       }
-
-//       const res = await axios.get(url, {
-//         headers: { Authorization: `Bearer ${token}` }
-//       });
-
-//       if (res.data) {
-//         const rows = res.data.data.map((r) => {
-//           const attributes = r.properties || r.attributes || {};
-//           const geometry = r.geometry || {};
-//           const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
-//           return {
-//             id: r.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-//             attributes,
-//             geometry,
-//             elementType,
-//             color: getLayerStyle(r.name || layerName, elementType).color,
-//           };
-//         });
-
-//         setData(rows);
-
-//         // Group data by element type
-//         const grouped = {};
-//         rows.forEach((row) => {
-//           const type = row.elementType;
-//           if (!grouped[type]) {
-//             grouped[type] = [];
-//           }
-//           grouped[type].push(row);
-//         });
-//         setGroupedData(grouped);
-
-//         // Set pagination info
-//         if (res.data.pagination) {
-//           setTotalPages(res.data.pagination.totalPages);
-//           setCurrentPage(res.data.pagination.currentPage);
-//         }
-
-//         // Initialize visible columns based on first item's structure
-//         if (rows.length > 0) {
-//           const initialColumns = {
-//             id: true,
-//             ...Object.keys(rows[0].attributes || {}).reduce((acc, key) => {
-//               acc[`attributes.${key}`] = true;
-//               return acc;
-//             }, {}),
-//             geometry: true,
-//             color: true,
-//           };
-//           setVisibleColumns(initialColumns);
-
-//           // Set column order
-//           setColumnOrder([
-//             "id",
-//             ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
-//             "geometry",
-//             "color",
-//           ]);
-//         }
-
-//         // Set layer info if available
-//         if (res.data.layerInfo) {
-//           setLayerInfo(res.data.layerInfo);
-//         }
-//       }
-//     } catch (err) {
-//       console.error(err);
-//       toast.error("Failed to fetch data");
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (layerName && token) {
-//       fetchData(1, selectedElement);
-//     }
-//   }, [layerName, limit, token, selectedElement]);
-
-//   const handleElementChange = (elementType) => {
-//     setSelectedElement(elementType);
-//     setActiveTab(elementType);
-//     // Reset to first page when changing element type
-//     fetchData(1, elementType);
-//   };
-
-//   const executeQuery = () => {
-//     setLoading(true);
-//     const result =
-//       searchTerm.toLowerCase() === "all data"
-//         ? data
-//         : data.filter(
-//             (f) =>
-//               Object.values(f.attributes).some((val) =>
-//                 val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-//               ) ||
-//               f.id?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-//               JSON.stringify(f.geometry).toLowerCase().includes(searchTerm.toLowerCase()) ||
-//               f.color?.toLowerCase().includes(searchTerm.toLowerCase())
-//           );
-
-//     // Regroup the filtered data
-//     const grouped = {};
-//     result.forEach((row) => {
-//       const type = row.elementType;
-//       if (!grouped[type]) {
-//         grouped[type] = [];
-//       }
-//       grouped[type].push(row);
-//     });
-//     setGroupedData(grouped);
-
-//     setLoading(false);
-//     toast.success(`Query run successfully. Rows found: ${result.length}`);
-//   };
-
-//   const toggleRow = (id) => {
-//     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
-//   };
-
-//   const toggleColumn = (column) => {
-//     setVisibleColumns((prev) => ({ ...prev, [column]: !prev[column] }));
-//   };
-
-//   // Function to render value based on its type
-//   const renderValue = (value, isGeometry = false) => {
-//     if (value === null || value === undefined) return "N/A";
-
-//     if (typeof value === "object") {
-//       if (isGeometry) {
-//         const geomType = value.type || "Unknown";
-//         const coordCount = value.coordinates ? JSON.stringify(value.coordinates).length : 0;
-//         return (
-//           <div>
-//             <div>
-//               <strong>Type:</strong> {geomType}
-//             </div>
-//             <div>
-//               <span style={expandStyle} onClick={() => toggleRow(value)}>
-//                 {expandedRows[value] ? "Hide Coordinates" : "Show Coordinates"}
-//               </span>
-//             </div>
-//             {expandedRows[value] && (
-//               <pre style={{ fontSize: "10px", marginTop: "5px", maxHeight: "200px", overflow: "auto" }}>
-//                 {JSON.stringify(value, null, 2)}
-//               </pre>
-//             )}
-//           </div>
-//         );
-//       }
-
-//       return expandedRows[value] ? (
-//         <pre style={{ maxHeight: "200px", overflow: "auto" }}>
-//           {JSON.stringify(value, null, 2)}
-//         </pre>
-//       ) : (
-//         <span style={expandStyle} onClick={() => toggleRow(value)}>
-//           {Array.isArray(value)
-//             ? `[Array: ${value.length} items]`
-//             : `{Object: ${Object.keys(value).length} keys}`}
-//         </span>
-//       );
-//     }
-
-//     // For very long strings, truncate and show expand option
-//     if (typeof value === "string" && value.length > 100) {
-//       return expandedRows[value] ? (
-//         <div>
-//           <div>{value}</div>
-//           <span style={expandStyle} onClick={() => toggleRow(value)}>Show Less</span>
-//         </div>
-//       ) : (
-//         <div>
-//           <div>{value.substring(0, 100)}...</div>
-//           <span style={expandStyle} onClick={() => toggleRow(value)}>Show More</span>
-//         </div>
-//       );
-//     }
-
-//     return value.toString();
-//   };
-
-//   // --- Export Functions ---
-//   const exportCSV = () => {
-//     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
-//       const obj = { id: row.id };
-//       Object.entries(row.attributes || {}).forEach(([key, value]) => {
-//         obj[key] = typeof value === "object" ? JSON.stringify(value) : value;
-//       });
-//       obj.geometry = JSON.stringify(row.geometry);
-//       obj.color = row.color;
-//       return obj;
-//     });
-//     const csv = Papa.unparse(dataToExport);
-//     const blob = new Blob([csv], { type: "text/csv" });
-//     const url = window.URL.createObjectURL(blob);
-//     const a = document.createElement("a");
-//     a.href = url;
-//     a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
-//     a.click();
-//     window.URL.revokeObjectURL(url);
-//   };
-
-//   const exportJSON = () => {
-//     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
-//       return { id: row.id, attributes: row.attributes, geometry: row.geometry, color: row.color };
-//     });
-//     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: "application/json" });
-//     const url = window.URL.createObjectURL(blob);
-//     const a = document.createElement("a");
-//     a.href = url;
-//     a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
-//     a.click();
-//     window.URL.revokeObjectURL(url);
-//   };
-
-//   const exportXLSX = () => {
-//     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
-//       const obj = { id: row.id };
-//       Object.entries(row.attributes || {}).forEach(([key, value]) => {
-//         obj[key] = typeof value === "object" ? JSON.stringify(value) : value;
-//       });
-//       obj.geometry = JSON.stringify(row.geometry);
-//       obj.color = row.color;
-//       return obj;
-//     });
-//     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-//     const workbook = XLSX.utils.book_new();
-//     XLSX.utils.book_append_sheet(workbook, worksheet, layerName);
-//     XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
-//   };
-
-//   // --- Inline CSS ---
-//   const containerStyle = { maxWidth: "95%", margin: "40px auto", padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" };
-//   const titleStyle = { fontSize: 32, fontWeight: "bold", marginBottom: 20, textAlign: "center", color: "#1f2937" };
-//   const controlsStyle = { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 20, alignItems: "center" };
-//   const inputStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, flex: "1 1 300px" };
-//   const buttonStyle = (bgColor) => ({
-//     backgroundColor: bgColor,
-//     color: "#fff",
-//     padding: "10px 16px",
-//     borderRadius: 8,
-//     fontWeight: "600",
-//     border: "none",
-//     cursor: "pointer",
-//     transition: "all 0.2s",
-//     minWidth: 120,
-//     marginTop: 5,
-//   });
-//   const tableContainerStyle = { overflowX: "auto", borderRadius: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", border: "1px solid #e5e7eb", marginBottom: 20 };
-//   const tableStyle = { width: "100%", borderCollapse: "collapse", minWidth: "max-content" };
-//   const thStyle = { backgroundColor: "#f3f4f6", color: "#374151", textAlign: "left", fontWeight: "600", padding: "12px 16px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0 };
-//   const tdStyle = { padding: "12px 16px", borderBottom: "1px solid #e5e7eb", color: "#1f2937", fontSize: 14, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" };
-//   const expandStyle = { fontSize: 12, color: "#3b82f6", cursor: "pointer", marginLeft: 10 };
-//   const checkboxContainer = { display: "flex", gap: 15, flexWrap: "wrap", marginBottom: 15, padding: 10, backgroundColor: "#f9fafb", borderRadius: 8 };
-//   const paginationStyle = { display: "flex", justifyContent: "center", alignItems: "center", gap: 10, marginTop: 20 };
-//   const pageButtonStyle = { padding: "8px 12px", borderRadius: 6, border: "1px solid #d1d5db", backgroundColor: "#fff", cursor: "pointer" };
-//   const activePageButtonStyle = { ...pageButtonStyle, backgroundColor: "#3b82f6", color: "#fff" };
-//   const tabContainerStyle = { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" };
-//   const tabStyle = { padding: "10px 20px", borderRadius: 8, border: "1px solid #d1d5db", backgroundColor: "#f9fafb", cursor: "pointer" };
-//   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
-//   const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
-
-//   // Function to render a table for a specific element type
-//   const renderElementTable = (elementType, elementData) => {
-//     return (
-//       <div key={elementType} style={tableContainerStyle}>
-//         <h3 style={{ margin: "0 0 15px 0", padding: "10px 15px", backgroundColor: "#e0f2fe", borderRadius: "8px 8px 0 0" }}>
-//           {dataTypes.find((dt) => dt.key === elementType)?.label || elementType.toUpperCase()} ({elementData.length} items)
-//         </h3>
-//         <table style={tableStyle}>
-//           <thead>
-//             <tr>
-//               {columnOrder.map(
-//                 (col) =>
-//                   visibleColumns[col] && (
-//                     <th key={col} style={thStyle}>
-//                       {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-//                     </th>
-//                   )
-//               )}
-//               <th style={thStyle}>Actions</th>
-//             </tr>
-//           </thead>
-//           <tbody>
-//             {elementData.map((item, index) => (
-//               <tr key={item.id} style={{ backgroundColor: index % 2 === 0 ? "#f9fafb" : "#fff" }}>
-//                 {columnOrder.map(
-//                   (col) =>
-//                     visibleColumns[col] && (
-//                       <td key={col} style={tdStyle} title={typeof item[col] === "object" ? JSON.stringify(item[col]) : item[col]}>
-//                         {col === "id" ? item.id : col === "geometry" ? renderValue(item.geometry, true) : col === "color" ? (
-//                           <div style={{ display: "flex", alignItems: "center" }}>
-//                             <span style={{ backgroundColor: item.color, width: 18, height: 10, display: "inline-block", marginRight: 6 }}></span>
-//                             {item.color}
-//                           </div>
-//                         ) : col.startsWith("attributes.") ? renderValue(item.attributes[col.replace("attributes.", "")]) : renderValue(item[col])}
-//                       </td>
-//                     )
-//                 )}
-//                 <td style={tdStyle}>
-//                   <span style={expandStyle} onClick={() => toggleRow(item.id)}>
-//                     {expandedRows[item.id] ? "Collapse All" : "Expand All"}
-//                   </span>
-//                 </td>
-//               </tr>
-//             ))}
-//           </tbody>
-//         </table>
-//       </div>
-//     );
-//   };
-
-//   // Get the data to display based on selection
-//   const getDataToDisplay = () => {
-//     if (selectedElement === "all") {
-//       return groupedData;
-//     } else {
-//       return { [selectedElement]: groupedData[selectedElement] || [] };
-//     }
-//   };
-
-//   // Get available element types from both the predefined list and the actual data
-//   const getAvailableElementTypes = () => {
-//     const availableTypes = new Set(Object.keys(groupedData));
-//     return dataTypes.filter((dt) => availableTypes.has(dt.key));
-//   };
-
-//   return (
-//     <div style={containerStyle}>
-//       <ToastContainer />
-//       <h1 style={titleStyle}>Data View - {layerName}</h1>
-
-//       {/* Layer Info */}
-//       {Object.keys(layerInfo).length > 0 && (
-//         <div style={{ marginBottom: 20, padding: 15, backgroundColor: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
-//           <h3 style={{ margin: "0 0 10px 0", color: "#0369a1" }}>Layer Information</h3>
-//           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-//             {Object.entries(layerInfo).map(([key, value]) => (
-//               <div key={key}>
-//                 <strong>{key}:</strong> {value?.toString()}
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Controls */}
-//       <div style={controlsStyle}>
-//         <input
-//           type="text"
-//           placeholder="Search across all fields..."
-//           value={searchTerm}
-//           onChange={(e) => setSearchTerm(e.target.value)}
-//           style={inputStyle}
-//           onKeyPress={(e) => e.key === "Enter" && executeQuery()}
-//         />
-//         <button onClick={executeQuery} style={buttonStyle("#22c55e")}>
-//           Search
-//         </button>
-//         <button onClick={exportCSV} style={buttonStyle("#2563eb")}>
-//           Export CSV
-//         </button>
-//         <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>
-//           Export JSON
-//         </button>
-//         <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
-//           Export XLSX
-//         </button>
-
-//         {/* Page size selector */}
-//         <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
-//           <option value={10}>10 rows</option>
-//           <option value={25}>25 rows</option>
-//           <option value={50}>50 rows</option>
-//           <option value={100}>100 rows</option>
-//         </select>
-//       </div>
-
-//       {/* Element type selector */}
-//       <div style={{ marginBottom: 20 }}>
-//         <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
-//           Select Element Type:
-//         </label>
-//         <select
-//           id="elementSelector"
-//           value={selectedElement}
-//           onChange={(e) => handleElementChange(e.target.value)}
-//           style={selectStyle}
-//         >
-//           <option value="all">All Elements</option>
-//           {dataTypes.map((type) => (
-//             <option key={type.key} value={type.key}>
-//               {type.label}
-//             </option>
-//           ))}
-//         </select>
-//       </div>
-
-//       {/* Column toggle */}
-//       {columnOrder.length > 0 && (
-//         <div style={checkboxContainer}>
-//           <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
-//           {columnOrder.map((col) => (
-//             <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
-//               <input type="checkbox" checked={visibleColumns[col] || false} onChange={() => toggleColumn(col)} style={{ marginRight: 6 }} />
-//               {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-//             </label>
-//           ))}
-//         </div>
-//       )}
-
-//       {/* Tabs for different element types */}
-//       <div style={tabContainerStyle}>
-//         <div
-//           style={activeTab === "all" ? activeTabStyle : tabStyle}
-//           onClick={() => handleElementChange("all")}
-//         >
-//           All Elements
-//         </div>
-//         {dataTypes.map((type) => (
-//           <div
-//             key={type.key}
-//             style={activeTab === type.key ? activeTabStyle : tabStyle}
-//             onClick={() => handleElementChange(type.key)}
-//           >
-//             {type.label}
-//           </div>
-//         ))}
-//       </div>
-
-//       {/* Tables */}
-//       {loading ? (
-//         <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
-//       ) : Object.keys(getDataToDisplay()).length > 0 ? (
-//         Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
-//       ) : (
-//         <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
-//       )}
-
-//       {/* Pagination */}
-//       {totalPages > 1 && (
-//         <div style={paginationStyle}>
-//           <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
-//             Previous
-//           </button>
-
-//           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-//             let pageNum;
-//             if (currentPage <= 3) {
-//               pageNum = i + 1;
-//             } else if (currentPage >= totalPages - 2) {
-//               pageNum = totalPages - 4 + i;
-//             } else {
-//               pageNum = currentPage - 2 + i;
-//             }
-
-//             if (pageNum < 1 || pageNum > totalPages) return null;
-
-//             return (
-//               <button
-//                 key={pageNum}
-//                 onClick={() => fetchData(pageNum, selectedElement)}
-//                 style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
-//               >
-//                 {pageNum}
-//               </button>
-//             );
-//           })}
-
-//           <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
-//             Next
-//           </button>
-
-//           <span style={{ marginLeft: 10 }}>
-//             Page {currentPage} of {totalPages}
-//           </span>
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
 // export default DataView;
-
-// // export default DataView;
-// import React, { useEffect, useState } from "react";
-// import { useParams, useNavigate } from "react-router-dom";
-// import axios from "axios";
-// import { toast, ToastContainer } from "react-toastify";
-// import "react-toastify/dist/ReactToastify.css";
-// import * as XLSX from "xlsx";
-// import Papa from "papaparse";
-
-// // Predefined data types
-// const dataTypes = [
-//   { key: "buildings", label: "Buildings" },
-//   { key: "roads", label: "Roads" },
-//   { key: "footpaths", label: "Footpaths" },
-//   { key: "vegetation", label: "Vegetation" },
-//   { key: "parking", label: "Parking" },
-//   { key: "solid_waste", label: "Solid Waste" },
-//   { key: "electricity", label: "Electricity" },
-//   { key: "water_supply", label: "Water Supply" },
-//   { key: "drainage", label: "Drainage System" },
-//   { key: "vimbweta", label: "Vimbweta" },
-//   { key: "security", label: "Security Lights" },
-//   { key: "recreational_areas", label: "Recreational Areas" },
-//   { key: "aru_boundary", label: "Aru Boundary" },
-// ];
-
-// // Layer styles from DataManagement
-// const getLayerStyle = (name, type) => {
-//   const styles = {
-//     aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
-//     buildings: { color: "yellow", weight: 2, fillOpacity: 0.3 },
-//     roads: { color: "black", weight: 2, fillOpacity: 0.2 },
-//     footpaths: { color: "gray", weight: 2, fillOpacity: 0.2 },
-//     vegetation: { color: "green", weight: 2, fillOpacity: 0.3 },
-//     parking: { color: "purple", weight: 2, fillOpacity: 0.3 },
-//     solid_waste: { color: "darkblue", weight: 2, fillOpacity: 0.7 },
-//     electricity: { color: "khaki", weight: 2, fillOpacity: 0.3 },
-//     water_supply: { color: "blue", weight: 2, fillOpacity: 0.3 },
-//     drainage: { color: "gold", weight: 2, fillOpacity: 0.3 },
-//     vimbweta: { color: "orange", weight: 2, fillOpacity: 0.7 },
-//     security: { color: "magenta", weight: 2, fillOpacity: 0.3 },
-//     recreational_areas: { color: "yellowgreen", weight: 2, fillOpacity: 0.3 },
-//   };
-//   return styles[type] || { color: "gray", weight: 2, fillOpacity: 0.2 };
-// };
-
-// function DataView() {
-//   const [data, setData] = useState([]);
-//   const [groupedData, setGroupedData] = useState({});
-//   const [searchTerm, setSearchTerm] = useState("");
-//   const [loading, setLoading] = useState(false);
-//   const [expandedRows, setExpandedRows] = useState({});
-//   const [visibleColumns, setVisibleColumns] = useState({});
-//   const [columnOrder, setColumnOrder] = useState([]);
-//   const [layerInfo, setLayerInfo] = useState({});
-//   const [currentPage, setCurrentPage] = useState(1);
-//   const [totalPages, setTotalPages] = useState(1);
-//   const [limit, setLimit] = useState(50);
-//   const [activeTab, setActiveTab] = useState("all");
-//   const [selectedElement, setSelectedElement] = useState("all");
-//   const [isValidLayer, setIsValidLayer] = useState(true);
-
-//   const { layerName } = useParams();
-//   const navigate = useNavigate();
-//   const token = localStorage.getItem("token");
-
-//   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
-
-//   // Validate layerName before making API calls
-//   const validateLayerName = () => {
-//     if (!layerName || layerName === "undefined") {
-//       setIsValidLayer(false);
-//       toast.error("Invalid layer name provided");
-//       return false;
-//     }
-//     setIsValidLayer(true);
-//     return true;
-//   };
-
-//   const fetchData = async (page = 1, elementType = "all") => {
-//     // Validate layerName before making API call
-//     if (!validateLayerName()) {
-//       return;
-//     }
-    
-//     setLoading(true);
-//     try {
-//       // Build the API URL with optional element type filter
-//       let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
-      
-//       // Add element type filter if a specific element is selected
-//       if (elementType !== "all") {
-//         url += `&elementType=${elementType}`;
-//       }
-
-//       const res = await axios.get(url, {
-//         headers: { Authorization: `Bearer ${token}` }
-//       });
-
-//       if (res.data) {
-//         const rows = res.data.data.map((r) => {
-//           const attributes = r.properties || r.attributes || {};
-//           const geometry = r.geometry || {};
-//           const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
-//           return {
-//             id: r.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-//             attributes,
-//             geometry,
-//             elementType,
-//             color: getLayerStyle(r.name || layerName, elementType).color,
-//           };
-//         });
-
-//         setData(rows);
-
-//         // Group data by element type
-//         const grouped = {};
-//         rows.forEach((row) => {
-//           const type = row.elementType;
-//           if (!grouped[type]) {
-//             grouped[type] = [];
-//           }
-//           grouped[type].push(row);
-//         });
-//         setGroupedData(grouped);
-
-//         // Set pagination info
-//         if (res.data.pagination) {
-//           setTotalPages(res.data.pagination.totalPages);
-//           setCurrentPage(res.data.pagination.currentPage);
-//         }
-
-//         // Initialize visible columns based on first item's structure
-//         if (rows.length > 0) {
-//           const initialColumns = {
-//             id: true,
-//             ...Object.keys(rows[0].attributes || {}).reduce((acc, key) => {
-//               acc[`attributes.${key}`] = true;
-//               return acc;
-//             }, {}),
-//             geometry: true,
-//             color: true,
-//           };
-//           setVisibleColumns(initialColumns);
-
-//           // Set column order
-//           setColumnOrder([
-//             "id",
-//             ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
-//             "geometry",
-//             "color",
-//           ]);
-//         }
-
-//         // Set layer info if available
-//         if (res.data.layerInfo) {
-//           setLayerInfo(res.data.layerInfo);
-//         }
-//       }
-//     } catch (err) {
-//       console.error(err);
-//       if (err.response?.status === 400) {
-//         toast.error("Invalid request. Please check the layer name.");
-//       } else if (err.response?.status === 404) {
-//         toast.error("Layer not found.");
-//         setIsValidLayer(false);
-//       } else {
-//         toast.error("Failed to fetch data");
-//       }
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (layerName && token) {
-//       // Validate layerName on component mount
-//       if (validateLayerName()) {
-//         fetchData(1, selectedElement);
-//       }
-//     }
-//   }, [layerName, limit, token, selectedElement]);
-
-//   const handleElementChange = (elementType) => {
-//     setSelectedElement(elementType);
-//     setActiveTab(elementType);
-//     // Reset to first page when changing element type
-//     fetchData(1, elementType);
-//   };
-
-//   const executeQuery = () => {
-//     setLoading(true);
-//     const result =
-//       searchTerm.toLowerCase() === "all data"
-//         ? data
-//         : data.filter(
-//             (f) =>
-//               Object.values(f.attributes).some((val) =>
-//                 val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-//               ) ||
-//               f.id?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-//               JSON.stringify(f.geometry).toLowerCase().includes(searchTerm.toLowerCase()) ||
-//               f.color?.toLowerCase().includes(searchTerm.toLowerCase())
-//           );
-
-//     // Regroup the filtered data
-//     const grouped = {};
-//     result.forEach((row) => {
-//       const type = row.elementType;
-//       if (!grouped[type]) {
-//         grouped[type] = [];
-//       }
-//       grouped[type].push(row);
-//     });
-//     setGroupedData(grouped);
-
-//     setLoading(false);
-//     toast.success(`Query run successfully. Rows found: ${result.length}`);
-//   };
-
-//   const toggleRow = (id) => {
-//     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
-//   };
-
-//   const toggleColumn = (column) => {
-//     setVisibleColumns((prev) => ({ ...prev, [column]: !prev[column] }));
-//   };
-
-//   // Function to render value based on its type
-//   const renderValue = (value, isGeometry = false) => {
-//     if (value === null || value === undefined) return "N/A";
-
-//     if (typeof value === "object") {
-//       if (isGeometry) {
-//         const geomType = value.type || "Unknown";
-//         const coordCount = value.coordinates ? JSON.stringify(value.coordinates).length : 0;
-//         return (
-//           <div>
-//             <div>
-//               <strong>Type:</strong> {geomType}
-//             </div>
-//             <div>
-//               <span style={expandStyle} onClick={() => toggleRow(value)}>
-//                 {expandedRows[value] ? "Hide Coordinates" : "Show Coordinates"}
-//               </span>
-//             </div>
-//             {expandedRows[value] && (
-//               <pre style={{ fontSize: "10px", marginTop: "5px", maxHeight: "200px", overflow: "auto" }}>
-//                 {JSON.stringify(value, null, 2)}
-//               </pre>
-//             )}
-//           </div>
-//         );
-//       }
-
-//       return expandedRows[value] ? (
-//         <pre style={{ maxHeight: "200px", overflow: "auto" }}>
-//           {JSON.stringify(value, null, 2)}
-//         </pre>
-//       ) : (
-//         <span style={expandStyle} onClick={() => toggleRow(value)}>
-//           {Array.isArray(value)
-//             ? `[Array: ${value.length} items]`
-//             : `{Object: ${Object.keys(value).length} keys}`}
-//         </span>
-//       );
-//     }
-
-//     // For very long strings, truncate and show expand option
-//     if (typeof value === "string" && value.length > 100) {
-//       return expandedRows[value] ? (
-//         <div>
-//           <div>{value}</div>
-//           <span style={expandStyle} onClick={() => toggleRow(value)}>Show Less</span>
-//         </div>
-//       ) : (
-//         <div>
-//           <div>{value.substring(0, 100)}...</div>
-//           <span style={expandStyle} onClick={() => toggleRow(value)}>Show More</span>
-//         </div>
-//       );
-//     }
-
-//     return value.toString();
-//   };
-
-//   // --- Export Functions ---
-//   const exportCSV = () => {
-//     if (!isValidLayer) return;
-    
-//     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
-//       const obj = { id: row.id };
-//       Object.entries(row.attributes || {}).forEach(([key, value]) => {
-//         obj[key] = typeof value === "object" ? JSON.stringify(value) : value;
-//       });
-//       obj.geometry = JSON.stringify(row.geometry);
-//       obj.color = row.color;
-//       return obj;
-//     });
-//     const csv = Papa.unparse(dataToExport);
-//     const blob = new Blob([csv], { type: "text/csv" });
-//     const url = window.URL.createObjectURL(blob);
-//     const a = document.createElement("a");
-//     a.href = url;
-//     a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
-//     a.click();
-//     window.URL.revokeObjectURL(url);
-//   };
-
-//   const exportJSON = () => {
-//     if (!isValidLayer) return;
-    
-//     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
-//       return { id: row.id, attributes: row.attributes, geometry: row.geometry, color: row.color };
-//     });
-//     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: "application/json" });
-//     const url = window.URL.createObjectURL(blob);
-//     const a = document.createElement("a");
-//     a.href = url;
-//     a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
-//     a.click();
-//     window.URL.revokeObjectURL(url);
-//   };
-
-//   const exportXLSX = () => {
-//     if (!isValidLayer) return;
-    
-//     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
-//       const obj = { id: row.id };
-//       Object.entries(row.attributes || {}).forEach(([key, value]) => {
-//         obj[key] = typeof value === "object" ? JSON.stringify(value) : value;
-//       });
-//       obj.geometry = JSON.stringify(row.geometry);
-//       obj.color = row.color;
-//       return obj;
-//     });
-//     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-//     const workbook = XLSX.utils.book_new();
-//     XLSX.utils.book_append_sheet(workbook, worksheet, layerName);
-//     XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
-//   };
-
-//   // --- Inline CSS ---
-//   const containerStyle = { maxWidth: "95%", margin: "40px auto", padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" };
-//   const titleStyle = { fontSize: 32, fontWeight: "bold", marginBottom: 20, textAlign: "center", color: "#1f2937" };
-//   const controlsStyle = { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 20, alignItems: "center" };
-//   const inputStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, flex: "1 1 300px" };
-//   const buttonStyle = (bgColor) => ({
-//     backgroundColor: bgColor,
-//     color: "#fff",
-//     padding: "10px 16px",
-//     borderRadius: 8,
-//     fontWeight: "600",
-//     border: "none",
-//     cursor: "pointer",
-//     transition: "all 0.2s",
-//     minWidth: 120,
-//     marginTop: 5,
-//   });
-//   const tableContainerStyle = { overflowX: "auto", borderRadius: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", border: "1px solid #e5e7eb", marginBottom: 20 };
-//   const tableStyle = { width: "100%", borderCollapse: "collapse", minWidth: "max-content" };
-//   const thStyle = { backgroundColor: "#f3f4f6", color: "#374151", textAlign: "left", fontWeight: "600", padding: "12px 16px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0 };
-//   const tdStyle = { padding: "12px 16px", borderBottom: "1px solid #e5e7eb", color: "#1f2937", fontSize: 14, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" };
-//   const expandStyle = { fontSize: 12, color: "#3b82f6", cursor: "pointer", marginLeft: 10 };
-//   const checkboxContainer = { display: "flex", gap: 15, flexWrap: "wrap", marginBottom: 15, padding: 10, backgroundColor: "#f9fafb", borderRadius: 8 };
-//   const paginationStyle = { display: "flex", justifyContent: "center", alignItems: "center", gap: 10, marginTop: 20 };
-//   const pageButtonStyle = { padding: "8px 12px", borderRadius: 6, border: "1px solid #d1d5db", backgroundColor: "#fff", cursor: "pointer" };
-//   const activePageButtonStyle = { ...pageButtonStyle, backgroundColor: "#3b82f6", color: "#fff" };
-//   const tabContainerStyle = { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" };
-//   const tabStyle = { padding: "10px 20px", borderRadius: 8, border: "1px solid #d1d5db", backgroundColor: "#f9fafb", cursor: "pointer" };
-//   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
-//   const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
-//   const errorContainerStyle = { textAlign: "center", padding: "40px 20px", backgroundColor: "#fef2f2", borderRadius: "8px", border: "1px solid #fecaca" };
-
-//   // Function to render a table for a specific element type
-//   const renderElementTable = (elementType, elementData) => {
-//     return (
-//       <div key={elementType} style={tableContainerStyle}>
-//         <h3 style={{ margin: "0 0 15px 0", padding: "10px 15px", backgroundColor: "#e0f2fe", borderRadius: "8px 8px 0 0" }}>
-//           {dataTypes.find((dt) => dt.key === elementType)?.label || elementType.toUpperCase()} ({elementData.length} items)
-//         </h3>
-//         <table style={tableStyle}>
-//           <thead>
-//             <tr>
-//               {columnOrder.map(
-//                 (col) =>
-//                   visibleColumns[col] && (
-//                     <th key={col} style={thStyle}>
-//                       {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-//                     </th>
-//                   )
-//               )}
-//               <th style={thStyle}>Actions</th>
-//             </tr>
-//           </thead>
-//           <tbody>
-//             {elementData.map((item, index) => (
-//               <tr key={item.id} style={{ backgroundColor: index % 2 === 0 ? "#f9fafb" : "#fff" }}>
-//                 {columnOrder.map(
-//                   (col) =>
-//                     visibleColumns[col] && (
-//                       <td key={col} style={tdStyle} title={typeof item[col] === "object" ? JSON.stringify(item[col]) : item[col]}>
-//                         {col === "id" ? item.id : col === "geometry" ? renderValue(item.geometry, true) : col === "color" ? (
-//                           <div style={{ display: "flex", alignItems: "center" }}>
-//                             <span style={{ backgroundColor: item.color, width: 18, height: 10, display: "inline-block", marginRight: 6 }}></span>
-//                             {item.color}
-//                           </div>
-//                         ) : col.startsWith("attributes.") ? renderValue(item.attributes[col.replace("attributes.", "")]) : renderValue(item[col])}
-//                       </td>
-//                     )
-//                 )}
-//                 <td style={tdStyle}>
-//                   <span style={expandStyle} onClick={() => toggleRow(item.id)}>
-//                     {expandedRows[item.id] ? "Collapse All" : "Expand All"}
-//                   </span>
-//                 </td>
-//               </tr>
-//             ))}
-//           </tbody>
-//         </table>
-//       </div>
-//     );
-//   };
-
-//   // Get the data to display based on selection
-//   const getDataToDisplay = () => {
-//     if (selectedElement === "all") {
-//       return groupedData;
-//     } else {
-//       return { [selectedElement]: groupedData[selectedElement] || [] };
-//     }
-//   };
-
-//   // Show error if layer is invalid
-//   if (!isValidLayer) {
-//     return (
-//       <div style={containerStyle}>
-//         <div style={errorContainerStyle}>
-//           <h2 style={{ color: "#dc2626" }}>Invalid Layer</h2>
-//           <p>The layer name "{layerName}" is not valid or does not exist.</p>
-//           <button 
-//             onClick={() => navigate(-1)} 
-//             style={buttonStyle("#dc2626")}
-//           >
-//             Go Back
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div style={containerStyle}>
-//       <ToastContainer />
-//       <h1 style={titleStyle}>Data View - {layerName}</h1>
-
-//       {/* Layer Info */}
-//       {Object.keys(layerInfo).length > 0 && (
-//         <div style={{ marginBottom: 20, padding: 15, backgroundColor: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
-//           <h3 style={{ margin: "0 0 10px 0", color: "#0369a1" }}>Layer Information</h3>
-//           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-//             {Object.entries(layerInfo).map(([key, value]) => (
-//               <div key={key}>
-//                 <strong>{key}:</strong> {value?.toString()}
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Controls */}
-//       <div style={controlsStyle}>
-//         <input
-//           type="text"
-//           placeholder="Search across all fields..."
-//           value={searchTerm}
-//           onChange={(e) => setSearchTerm(e.target.value)}
-//           style={inputStyle}
-//           onKeyPress={(e) => e.key === "Enter" && executeQuery()}
-//         />
-//         <button onClick={executeQuery} style={buttonStyle("#22c55e")}>
-//           Search
-//         </button>
-//         <button onClick={exportCSV} style={buttonStyle("#2563eb")}>
-//           Export CSV
-//         </button>
-//         <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>
-//           Export JSON
-//         </button>
-//         <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
-//           Export XLSX
-//         </button>
-
-//         {/* Page size selector */}
-//         <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
-//           <option value={10}>10 rows</option>
-//           <option value={25}>25 rows</option>
-//           <option value={50}>50 rows</option>
-//           <option value={100}>100 rows</option>
-//         </select>
-//       </div>
-
-//       {/* Element type selector */}
-//       <div style={{ marginBottom: 20 }}>
-//         <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
-//           Select Element Type:
-//         </label>
-//         <select
-//           id="elementSelector"
-//           value={selectedElement}
-//           onChange={(e) => handleElementChange(e.target.value)}
-//           style={selectStyle}
-//         >
-//           <option value="all">All Elements</option>
-//           {dataTypes.map((type) => (
-//             <option key={type.key} value={type.key}>
-//               {type.label}
-//             </option>
-//           ))}
-//         </select>
-//       </div>
-
-//       {/* Column toggle */}
-//       {columnOrder.length > 0 && (
-//         <div style={checkboxContainer}>
-//           <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
-//           {columnOrder.map((col) => (
-//             <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
-//               <input type="checkbox" checked={visibleColumns[col] || false} onChange={() => toggleColumn(col)} style={{ marginRight: 6 }} />
-//               {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-//             </label>
-//           ))}
-//         </div>
-//       )}
-
-//       {/* Tabs for different element types */}
-//       <div style={tabContainerStyle}>
-//         <div
-//           style={activeTab === "all" ? activeTabStyle : tabStyle}
-//           onClick={() => handleElementChange("all")}
-//         >
-//           All Elements
-//         </div>
-//         {dataTypes.map((type) => (
-//           <div
-//             key={type.key}
-//             style={activeTab === type.key ? activeTabStyle : tabStyle}
-//             onClick={() => handleElementChange(type.key)}
-//           >
-//             {type.label}
-//           </div>
-//         ))}
-//       </div>
-
-//       {/* Tables */}
-//       {loading ? (
-//         <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
-//       ) : Object.keys(getDataToDisplay()).length > 0 ? (
-//         Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
-//       ) : (
-//         <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
-//       )}
-
-//       {/* Pagination */}
-//       {totalPages > 1 && (
-//         <div style={paginationStyle}>
-//           <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
-//             Previous
-//           </button>
-
-//           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-//             let pageNum;
-//             if (currentPage <= 3) {
-//               pageNum = i + 1;
-//             } else if (currentPage >= totalPages - 2) {
-//               pageNum = totalPages - 4 + i;
-//             } else {
-//               pageNum = currentPage - 2 + i;
-//             }
-
-//             if (pageNum < 1 || pageNum > totalPages) return null;
-
-//             return (
-//               <button
-//                 key={pageNum}
-//                 onClick={() => fetchData(pageNum, selectedElement)}
-//                 style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
-//               >
-//                 {pageNum}
-//               </button>
-//             );
-//           })}
-
-//           <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
-//             Next
-//           </button>
-
-//           <span style={{ marginLeft: 10 }}>
-//             Page {currentPage} of {totalPages}
-//           </span>
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
-// export default DataView;
-import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
-import debounce from "lodash/debounce";
 
 // Predefined data types
 const dataTypes = [
@@ -2122,9 +954,7 @@ const dataTypes = [
   { key: "aru_boundary", label: "Aru Boundary" },
 ];
 
-const validLayers = dataTypes.map((dt) => dt.key);
-
-// Layer styles
+// Layer styles from DataManagement
 const getLayerStyle = (name, type) => {
   const styles = {
     aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
@@ -2149,7 +979,6 @@ function DataView() {
   const [groupedData, setGroupedData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
   const [visibleColumns, setVisibleColumns] = useState({});
   const [columnOrder, setColumnOrder] = useState([]);
@@ -2159,167 +988,136 @@ function DataView() {
   const [limit, setLimit] = useState(50);
   const [activeTab, setActiveTab] = useState("all");
   const [selectedElement, setSelectedElement] = useState("all");
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
-  const [selectedRows, setSelectedRows] = useState(new Set());
 
   const { layerName } = useParams();
-  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Validate layerName
-  useEffect(() => {
-    if (!layerName || layerName === "(empty)" || !validLayers.includes(layerName)) {
-      const errorMessage = `Invalid layer: "${layerName || '(empty)'}" is not valid or does not exist.`;
-      setError(errorMessage);
-      toast.error(`${errorMessage} Redirecting to home page...`);
-      setTimeout(() => navigate("/"), 3000);
-      return;
-    }
-    setError(null);
-  }, [layerName, navigate]);
-
-  // Fetch data
-  const fetchData = useCallback(
-    async (page = 1, elementType = "all") => {
-      if (!layerName || !validLayers.includes(layerName) || !token) {
-        setError("Invalid layer name or missing authentication token");
-        setLoading(false);
-        return;
+  const fetchData = async (page = 1, elementType = "all") => {
+    setLoading(true);
+    try {
+      // Build the API URL with optional element type filter
+      let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
+      
+      // Add element type filter if a specific element is selected
+      if (elementType !== "all") {
+        url += `&elementType=${elementType}`;
       }
 
-      setLoading(true);
-      setError(null);
-      try {
-        let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
-        if (elementType !== "all") {
-          url += `&elementType=${elementType}`;
-        }
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-        const res = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 10000,
+      if (res.data) {
+        const rows = res.data.data.map((r) => {
+          const attributes = r.properties || r.attributes || {};
+          const geometry = r.geometry || {};
+          const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
+          return {
+            id: r.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            attributes,
+            geometry,
+            elementType,
+            color: getLayerStyle(r.name || layerName, elementType).color,
+          };
         });
 
-        if (res.data && res.data.success) {
-          const rows = res.data.data.map((r) => {
-            const attributes = r.attributes || {};
-            const geometry = r.geometry || {};
-            const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
-            return {
-              id: r.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              attributes,
-              geometry,
-              elementType,
-              color: getLayerStyle(r.name || layerName, elementType).color,
-            };
-          });
+        setData(rows);
 
-          setData(rows);
-
-          const grouped = {};
-          rows.forEach((row) => {
-            const type = row.elementType;
-            if (!grouped[type]) grouped[type] = [];
-            grouped[type].push(row);
-          });
-          setGroupedData(grouped);
-
-          if (res.data.pagination) {
-            setTotalPages(res.data.pagination.totalPages || 1);
-            setCurrentPage(res.data.pagination.currentPage || page);
+        // Group data by element type
+        const grouped = {};
+        rows.forEach((row) => {
+          const type = row.elementType;
+          if (!grouped[type]) {
+            grouped[type] = [];
           }
+          grouped[type].push(row);
+        });
+        setGroupedData(grouped);
 
-          if (rows.length > 0) {
-            const initialColumns = {
-              id: true,
-              ...Object.keys(rows[0].attributes || {}).reduce((acc, key) => {
-                acc[`attributes.${key}`] = true;
-                return acc;
-              }, {}),
-              geometry: true,
-              color: true,
-            };
-            setVisibleColumns(initialColumns);
-
-            setColumnOrder([
-              "id",
-              ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
-              "geometry",
-              "color",
-            ]);
-          }
-
-          if (res.data.layerInfo) {
-            setLayerInfo(res.data.layerInfo);
-          }
-        } else {
-          throw new Error("Invalid response format from server");
+        // Set pagination info
+        if (res.data.pagination) {
+          setTotalPages(res.data.pagination.totalPages);
+          setCurrentPage(res.data.pagination.currentPage);
         }
-      } catch (err) {
-        console.error("Fetch data error:", err);
-        const errorMessage =
-          err.response?.data?.error ||
-          (err.message === "Network Error" ? "Failed to connect to the server." : "Failed to fetch data.");
-        setError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setLoading(false);
+
+        // Initialize visible columns based on first item's structure
+        if (rows.length > 0) {
+          const initialColumns = {
+            id: true,
+            ...Object.keys(rows[0].attributes || {}).reduce((acc, key) => {
+              acc[`attributes.${key}`] = true;
+              return acc;
+            }, {}),
+            geometry: true,
+            color: true,
+          };
+          setVisibleColumns(initialColumns);
+
+          // Set column order
+          setColumnOrder([
+            "id",
+            ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
+            "geometry",
+            "color",
+          ]);
+        }
+
+        // Set layer info if available
+        if (res.data.layerInfo) {
+          setLayerInfo(res.data.layerInfo);
+        }
       }
-    },
-    [layerName, limit, token]
-  );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (layerName && validLayers.includes(layerName) && token) {
+    if (layerName && token) {
       fetchData(1, selectedElement);
     }
-  }, [layerName, token, selectedElement, fetchData]);
+  }, [layerName, limit, token, selectedElement]);
 
-  const handleElementChange = useCallback(
-    (elementType) => {
-      setSelectedElement(elementType);
-      setActiveTab(elementType);
-      setCurrentPage(1);
-      setSelectedRows(new Set());
-      fetchData(1, elementType);
-    },
-    [fetchData]
-  );
-
-  const debouncedSearch = useCallback(
-    debounce((term) => {
-      setLoading(true);
-      const result =
-        term.toLowerCase() === "all data"
-          ? data
-          : data.filter(
-              (f) =>
-                Object.values(f.attributes).some((val) =>
-                  val?.toString().toLowerCase().includes(term.toLowerCase())
-                ) ||
-                f.id?.toString().toLowerCase().includes(term.toLowerCase()) ||
-                JSON.stringify(f.geometry).toLowerCase().includes(term.toLowerCase()) ||
-                f.color?.toLowerCase().includes(term.toLowerCase())
-            );
-
-      const grouped = {};
-      result.forEach((row) => {
-        const type = row.elementType;
-        if (!grouped[type]) grouped[type] = [];
-        grouped[type].push(row);
-      });
-      setGroupedData(grouped);
-
-      setLoading(false);
-      toast.success(`Query run successfully. Rows found: ${result.length}`);
-    }, 500),
-    [data]
-  );
+  const handleElementChange = (elementType) => {
+    setSelectedElement(elementType);
+    setActiveTab(elementType);
+    // Reset to first page when changing element type
+    fetchData(1, elementType);
+  };
 
   const executeQuery = () => {
-    debouncedSearch(searchTerm);
+    setLoading(true);
+    const result =
+      searchTerm.toLowerCase() === "all data"
+        ? data
+        : data.filter(
+            (f) =>
+              Object.values(f.attributes).some((val) =>
+                val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+              ) ||
+              f.id?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+              JSON.stringify(f.geometry).toLowerCase().includes(searchTerm.toLowerCase()) ||
+              f.color?.toLowerCase().includes(searchTerm.toLowerCase())
+          );
+
+    // Regroup the filtered data
+    const grouped = {};
+    result.forEach((row) => {
+      const type = row.elementType;
+      if (!grouped[type]) {
+        grouped[type] = [];
+      }
+      grouped[type].push(row);
+    });
+    setGroupedData(grouped);
+
+    setLoading(false);
+    toast.success(`Query run successfully. Rows found: ${result.length}`);
   };
 
   const toggleRow = (id) => {
@@ -2330,63 +1128,19 @@ function DataView() {
     setVisibleColumns((prev) => ({ ...prev, [column]: !prev[column] }));
   };
 
-  const handleSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
-  };
-
-  const handleRowSelect = (id) => {
-    setSelectedRows((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) newSet.delete(id);
-      else newSet.add(id);
-      return newSet;
-    });
-  };
-
-  const sortedData = useMemo(() => {
-    if (!sortConfig.key) return data;
-
-    const sorted = [...data];
-    sorted.sort((a, b) => {
-      let aValue = sortConfig.key.startsWith("attributes.")
-        ? a.attributes[sortConfig.key.replace("attributes.", "")]
-        : a[sortConfig.key];
-      let bValue = sortConfig.key.startsWith("attributes.")
-        ? b.attributes[sortConfig.key.replace("attributes.", "")]
-        : b[sortConfig.key];
-
-      if (aValue === null || aValue === undefined) aValue = "";
-      if (bValue === null || bValue === undefined) bValue = "";
-
-      if (typeof aValue === "object") aValue = JSON.stringify(aValue);
-      if (typeof bValue === "object") bValue = JSON.stringify(bValue);
-
-      return sortConfig.direction === "asc"
-        ? aValue.toString().localeCompare(bValue.toString())
-        : bValue.toString().localeCompare(aValue.toString());
-    });
-
-    const grouped = {};
-    sorted.forEach((row) => {
-      const type = row.elementType;
-      if (!grouped[type]) grouped[type] = [];
-      grouped[type].push(row);
-    });
-    setGroupedData(grouped);
-    return sorted;
-  }, [data, sortConfig]);
-
+  // Function to render value based on its type
   const renderValue = (value, isGeometry = false) => {
     if (value === null || value === undefined) return "N/A";
+
     if (typeof value === "object") {
       if (isGeometry) {
         const geomType = value.type || "Unknown";
+        const coordCount = value.coordinates ? JSON.stringify(value.coordinates).length : 0;
         return (
           <div>
-            <div><strong>Type:</strong> {geomType}</div>
+            <div>
+              <strong>Type:</strong> {geomType}
+            </div>
             <div>
               <span style={expandStyle} onClick={() => toggleRow(value)}>
                 {expandedRows[value] ? "Hide Coordinates" : "Show Coordinates"}
@@ -2400,6 +1154,7 @@ function DataView() {
           </div>
         );
       }
+
       return expandedRows[value] ? (
         <pre style={{ maxHeight: "200px", overflow: "auto" }}>
           {JSON.stringify(value, null, 2)}
@@ -2412,6 +1167,8 @@ function DataView() {
         </span>
       );
     }
+
+    // For very long strings, truncate and show expand option
     if (typeof value === "string" && value.length > 100) {
       return expandedRows[value] ? (
         <div>
@@ -2425,9 +1182,11 @@ function DataView() {
         </div>
       );
     }
+
     return value.toString();
   };
 
+  // --- Export Functions ---
   const exportCSV = () => {
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
@@ -2477,7 +1236,7 @@ function DataView() {
     XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
   };
 
-  // Inline CSS
+  // --- Inline CSS ---
   const containerStyle = { maxWidth: "95%", margin: "40px auto", padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" };
   const titleStyle = { fontSize: 32, fontWeight: "bold", marginBottom: 20, textAlign: "center", color: "#1f2937" };
   const controlsStyle = { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 20, alignItems: "center" };
@@ -2496,7 +1255,7 @@ function DataView() {
   });
   const tableContainerStyle = { overflowX: "auto", borderRadius: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", border: "1px solid #e5e7eb", marginBottom: 20 };
   const tableStyle = { width: "100%", borderCollapse: "collapse", minWidth: "max-content" };
-  const thStyle = { backgroundColor: "#f3f4f6", color: "#374151", textAlign: "left", fontWeight: "600", padding: "12px 16px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, cursor: "pointer" };
+  const thStyle = { backgroundColor: "#f3f4f6", color: "#374151", textAlign: "left", fontWeight: "600", padding: "12px 16px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0 };
   const tdStyle = { padding: "12px 16px", borderBottom: "1px solid #e5e7eb", color: "#1f2937", fontSize: 14, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" };
   const expandStyle = { fontSize: 12, color: "#3b82f6", cursor: "pointer", marginLeft: 10 };
   const checkboxContainer = { display: "flex", gap: 15, flexWrap: "wrap", marginBottom: 15, padding: 10, backgroundColor: "#f9fafb", borderRadius: 8 };
@@ -2507,8 +1266,8 @@ function DataView() {
   const tabStyle = { padding: "10px 20px", borderRadius: 8, border: "1px solid #d1d5db", backgroundColor: "#f9fafb", cursor: "pointer" };
   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
   const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
-  const errorStyle = { textAlign: "center", padding: 40, color: "#ef4444", fontSize: 18 };
 
+  // Function to render a table for a specific element type
   const renderElementTable = (elementType, elementData) => {
     return (
       <div key={elementType} style={tableContainerStyle}>
@@ -2518,35 +1277,11 @@ function DataView() {
         <table style={tableStyle}>
           <thead>
             <tr>
-              <th style={thStyle}>
-                <input
-                  type="checkbox"
-                  checked={elementData.every((item) => selectedRows.has(item.id))}
-                  onChange={() => {
-                    const newSet = new Set(selectedRows);
-                    if (elementData.every((item) => selectedRows.has(item.id))) {
-                      elementData.forEach((item) => newSet.delete(item.id));
-                    } else {
-                      elementData.forEach((item) => newSet.add(item.id));
-                    }
-                    setSelectedRows(newSet);
-                  }}
-                  aria-label="Select all rows"
-                />
-              </th>
               {columnOrder.map(
                 (col) =>
                   visibleColumns[col] && (
-                    <th
-                      key={col}
-                      style={thStyle}
-                      onClick={() => handleSort(col)}
-                      aria-label={`Sort by ${col.startsWith("attributes.") ? col.replace("attributes.", "") : col}`}
-                    >
+                    <th key={col} style={thStyle}>
                       {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-                      {sortConfig.key === col && (
-                        <span>{sortConfig.direction === "asc" ? " ▲" : " ▼"}</span>
-                      )}
                     </th>
                   )
               )}
@@ -2555,18 +1290,7 @@ function DataView() {
           </thead>
           <tbody>
             {elementData.map((item, index) => (
-              <tr
-                key={item.id}
-                style={{ backgroundColor: selectedRows.has(item.id) ? "#dbeafe" : index % 2 === 0 ? "#f9fafb" : "#fff" }}
-              >
-                <td style={tdStyle}>
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.has(item.id)}
-                    onChange={() => handleRowSelect(item.id)}
-                    aria-label={`Select row ${item.id}`}
-                  />
-                </td>
+              <tr key={item.id} style={{ backgroundColor: index % 2 === 0 ? "#f9fafb" : "#fff" }}>
                 {columnOrder.map(
                   (col) =>
                     visibleColumns[col] && (
@@ -2582,7 +1306,7 @@ function DataView() {
                 )}
                 <td style={tdStyle}>
                   <span style={expandStyle} onClick={() => toggleRow(item.id)}>
-                    {expandedRows[item.id] ? "Collapse" : "Expand"}
+                    {expandedRows[item.id] ? "Collapse All" : "Expand All"}
                   </span>
                 </td>
               </tr>
@@ -2593,227 +1317,171 @@ function DataView() {
     );
   };
 
+  // Get the data to display based on selection
   const getDataToDisplay = () => {
-    return selectedElement === "all" ? groupedData : { [selectedElement]: groupedData[selectedElement] || [] };
+    if (selectedElement === "all") {
+      return groupedData;
+    } else {
+      return { [selectedElement]: groupedData[selectedElement] || [] };
+    }
   };
 
+  // Get available element types from both the predefined list and the actual data
   const getAvailableElementTypes = () => {
     const availableTypes = new Set(Object.keys(groupedData));
     return dataTypes.filter((dt) => availableTypes.has(dt.key));
   };
-
-  if (!layerName || layerName === "(empty)" || !validLayers.includes(layerName)) {
-    return (
-      <div style={containerStyle}>
-        <ToastContainer />
-        <h1 style={titleStyle}>Data View</h1>
-        <p style={errorStyle}>
-          {error || `Invalid layer: "${layerName || '(empty)'}" is not valid or does not exist.`}
-          <br />
-          Please select a valid layer from the data management page.
-        </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
-          <button onClick={() => navigate(-1)} style={buttonStyle("#2563eb")} aria-label="Go back">
-            Go Back
-          </button>
-          <button onClick={() => navigate("/")} style={buttonStyle("#22c55e")} aria-label="Go to home">
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={containerStyle}>
       <ToastContainer />
       <h1 style={titleStyle}>Data View - {layerName}</h1>
 
-      {error && (
-        <div style={errorStyle}>
-          {error}
-          <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 10 }}>
-            <button onClick={() => navigate(-1)} style={buttonStyle("#2563eb")} aria-label="Go back">
-              Go Back
-            </button>
-            <button onClick={() => navigate("/")} style={buttonStyle("#22c55e")} aria-label="Go to home">
-              Go Home
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!error && Object.keys(layerInfo).length > 0 && (
+      {/* Layer Info */}
+      {Object.keys(layerInfo).length > 0 && (
         <div style={{ marginBottom: 20, padding: 15, backgroundColor: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
           <h3 style={{ margin: "0 0 10px 0", color: "#0369a1" }}>Layer Information</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {Object.entries(layerInfo).map(([key, value]) => (
               <div key={key}>
-                <strong>{key}:</strong> {typeof value === "object" ? JSON.stringify(value) : value?.toString()}
+                <strong>{key}:</strong> {value?.toString()}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {!error && (
-        <>
-          <div style={controlsStyle}>
-            <input
-              type="text"
-              placeholder="Search across all fields..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={inputStyle}
-              onKeyPress={(e) => e.key === "Enter" && executeQuery()}
-              aria-label="Search data"
-            />
-            <button onClick={executeQuery} style={buttonStyle("#22c55e")} aria-label="Execute search">
-              Search
-            </button>
-            <button onClick={exportCSV} style={buttonStyle("#2563eb")} aria-label="Export as CSV">
-              Export CSV
-            </button>
-            <button onClick={exportJSON} style={buttonStyle("#8b5cf6")} aria-label="Export as JSON">
-              Export JSON
-            </button>
-            <button onClick={exportXLSX} style={buttonStyle("#ec4899")} aria-label="Export as XLSX">
-              Export XLSX
-            </button>
-            <select
-              value={limit}
-              onChange={(e) => setLimit(parseInt(e.target.value))}
-              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}
-              aria-label="Select page size"
-            >
-              <option value={10}>10 rows</option>
-              <option value={25}>25 rows</option>
-              <option value={50}>50 rows</option>
-              <option value={100}>100 rows</option>
-            </select>
-          </div>
+      {/* Controls */}
+      <div style={controlsStyle}>
+        <input
+          type="text"
+          placeholder="Search across all fields..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={inputStyle}
+          onKeyPress={(e) => e.key === "Enter" && executeQuery()}
+        />
+        <button onClick={executeQuery} style={buttonStyle("#22c55e")}>
+          Search
+        </button>
+        <button onClick={exportCSV} style={buttonStyle("#2563eb")}>
+          Export CSV
+        </button>
+        <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>
+          Export JSON
+        </button>
+        <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
+          Export XLSX
+        </button>
 
-          <div style={{ marginBottom: 20 }}>
-            <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
-              Select Element Type:
+        {/* Page size selector */}
+        <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
+          <option value={10}>10 rows</option>
+          <option value={25}>25 rows</option>
+          <option value={50}>50 rows</option>
+          <option value={100}>100 rows</option>
+        </select>
+      </div>
+
+      {/* Element type selector */}
+      <div style={{ marginBottom: 20 }}>
+        <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
+          Select Element Type:
+        </label>
+        <select
+          id="elementSelector"
+          value={selectedElement}
+          onChange={(e) => handleElementChange(e.target.value)}
+          style={selectStyle}
+        >
+          <option value="all">All Elements</option>
+          {dataTypes.map((type) => (
+            <option key={type.key} value={type.key}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Column toggle */}
+      {columnOrder.length > 0 && (
+        <div style={checkboxContainer}>
+          <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
+          {columnOrder.map((col) => (
+            <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
+              <input type="checkbox" checked={visibleColumns[col] || false} onChange={() => toggleColumn(col)} style={{ marginRight: 6 }} />
+              {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
             </label>
-            <select
-              id="elementSelector"
-              value={selectedElement}
-              onChange={(e) => handleElementChange(e.target.value)}
-              style={selectStyle}
-              aria-label="Select element type"
-            >
-              <option value="all">All Elements</option>
-              {dataTypes.map((type) => (
-                <option key={type.key} value={type.key}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs for different element types */}
+      <div style={tabContainerStyle}>
+        <div
+          style={activeTab === "all" ? activeTabStyle : tabStyle}
+          onClick={() => handleElementChange("all")}
+        >
+          All Elements
+        </div>
+        {dataTypes.map((type) => (
+          <div
+            key={type.key}
+            style={activeTab === type.key ? activeTabStyle : tabStyle}
+            onClick={() => handleElementChange(type.key)}
+          >
+            {type.label}
           </div>
+        ))}
+      </div>
 
-          {columnOrder.length > 0 && (
-            <div style={checkboxContainer}>
-              <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
-              {columnOrder.map((col) => (
-                <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={visibleColumns[col] || false}
-                    onChange={() => toggleColumn(col)}
-                    style={{ marginRight: 6 }}
-                    aria-label={`Toggle ${col.startsWith("attributes.") ? col.replace("attributes.", "") : col} column`}
-                  />
-                  {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-                </label>
-              ))}
-            </div>
-          )}
+      {/* Tables */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
+      ) : Object.keys(getDataToDisplay()).length > 0 ? (
+        Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
+      ) : (
+        <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
+      )}
 
-          <div style={tabContainerStyle}>
-            <div
-              style={activeTab === "all" ? activeTabStyle : tabStyle}
-              onClick={() => handleElementChange("all")}
-              role="button"
-              tabIndex={0}
-              onKeyPress={(e) => e.key === "Enter" && handleElementChange("all")}
-              aria-label="View all elements"
-            >
-              All Elements
-            </div>
-            {getAvailableElementTypes().map((type) => (
-              <div
-                key={type.key}
-                style={activeTab === type.key ? activeTabStyle : tabStyle}
-                onClick={() => handleElementChange(type.key)}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => e.key === "Enter" && handleElementChange(type.key)}
-                aria-label={`View ${type.label}`}
-              >
-                {type.label}
-              </div>
-            ))}
-          </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={paginationStyle}>
+          <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
+            Previous
+          </button>
 
-          {loading ? (
-            <div style={{ textAlign: "center", padding: 40 }} aria-live="polite">
-              Loading...
-            </div>
-          ) : Object.keys(getDataToDisplay()).length > 0 ? (
-            Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
-          ) : (
-            <div style={{ textAlign: "center", padding: 40 }} aria-live="polite">
-              No data found for this element type.
-            </div>
-          )}
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum;
+            if (currentPage <= 3) {
+              pageNum = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
 
-          {totalPages > 1 && (
-            <div style={paginationStyle}>
+            if (pageNum < 1 || pageNum > totalPages) return null;
+
+            return (
               <button
-                onClick={() => fetchData(currentPage - 1, selectedElement)}
-                disabled={currentPage === 1}
-                style={pageButtonStyle}
-                aria-label="Previous page"
+                key={pageNum}
+                onClick={() => fetchData(pageNum, selectedElement)}
+                style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
               >
-                Previous
+                {pageNum}
               </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                if (pageNum < 1 || pageNum > totalPages) return null;
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => fetchData(pageNum, selectedElement)}
-                    style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
-                    aria-label={`Go to page ${pageNum}`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => fetchData(currentPage + 1, selectedElement)}
-                disabled={currentPage === totalPages}
-                style={pageButtonStyle}
-                aria-label="Next page"
-              >
-                Next
-              </button>
-              <span style={{ marginLeft: 10 }} aria-live="polite">
-                Page {currentPage} of {totalPages}
-              </span>
-            </div>
-          )}
-        </>
+            );
+          })}
+
+          <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
+            Next
+          </button>
+
+          <span style={{ marginLeft: 10 }}>
+            Page {currentPage} of {totalPages}
+          </span>
+        </div>
       )}
     </div>
   );
