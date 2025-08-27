@@ -2096,14 +2096,14 @@
 // }
 
 // export default DataView;
-// export default DataView;
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+import debounce from "lodash/debounce";
 
 // Predefined data types
 const dataTypes = [
@@ -2122,7 +2122,9 @@ const dataTypes = [
   { key: "aru_boundary", label: "Aru Boundary" },
 ];
 
-// Layer styles from DataManagement
+const validLayers = dataTypes.map((dt) => dt.key);
+
+// Layer styles
 const getLayerStyle = (name, type) => {
   const styles = {
     aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
@@ -2147,6 +2149,7 @@ function DataView() {
   const [groupedData, setGroupedData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
   const [visibleColumns, setVisibleColumns] = useState({});
   const [columnOrder, setColumnOrder] = useState([]);
@@ -2156,8 +2159,8 @@ function DataView() {
   const [limit, setLimit] = useState(50);
   const [activeTab, setActiveTab] = useState("all");
   const [selectedElement, setSelectedElement] = useState("all");
-  const [isValidLayer, setIsValidLayer] = useState(true);
-  const [layerDisplayName, setLayerDisplayName] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [selectedRows, setSelectedRows] = useState(new Set());
 
   const { layerName } = useParams();
   const navigate = useNavigate();
@@ -2165,171 +2168,158 @@ function DataView() {
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Validate layerName before making API calls
-  const validateLayerName = () => {
-    if (!layerName || layerName === "undefined" || layerName === "") {
-      setIsValidLayer(false);
-      setLayerDisplayName("(empty)");
-      toast.error("No layer name provided in the URL");
-      return false;
-    }
-    
-    // Additional validation - check if layerName contains only valid characters
-    const validLayerNameRegex = /^[a-zA-Z0-9_-]+$/;
-    if (!validLayerNameRegex.test(layerName)) {
-      setIsValidLayer(false);
-      setLayerDisplayName(layerName);
-      toast.error("Invalid layer name format");
-      return false;
-    }
-    
-    setIsValidLayer(true);
-    setLayerDisplayName(layerName);
-    return true;
-  };
-
-  const fetchData = async (page = 1, elementType = "all") => {
-    // Validate layerName before making API call
-    if (!validateLayerName()) {
+  // Validate layerName
+  useEffect(() => {
+    if (!layerName || layerName === "(empty)" || !validLayers.includes(layerName)) {
+      const errorMessage = `Invalid layer: "${layerName || '(empty)'}" is not valid or does not exist.`;
+      setError(errorMessage);
+      toast.error(`${errorMessage} Redirecting to home page...`);
+      setTimeout(() => navigate("/"), 3000);
       return;
     }
-    
-    setLoading(true);
-    try {
-      // Build the API URL with optional element type filter
-      let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
-      
-      // Add element type filter if a specific element is selected
-      if (elementType !== "all") {
-        url += `&elementType=${elementType}`;
+    setError(null);
+  }, [layerName, navigate]);
+
+  // Fetch data
+  const fetchData = useCallback(
+    async (page = 1, elementType = "all") => {
+      if (!layerName || !validLayers.includes(layerName) || !token) {
+        setError("Invalid layer name or missing authentication token");
+        setLoading(false);
+        return;
       }
 
-      const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      setLoading(true);
+      setError(null);
+      try {
+        let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
+        if (elementType !== "all") {
+          url += `&elementType=${elementType}`;
+        }
 
-      if (res.data) {
-        const rows = res.data.data.map((r) => {
-          const attributes = r.properties || r.attributes || {};
-          const geometry = r.geometry || {};
-          const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
-          return {
-            id: r.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            attributes,
-            geometry,
-            elementType,
-            color: getLayerStyle(r.name || layerName, elementType).color,
-          };
+        const res = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 10000,
         });
 
-        setData(rows);
+        if (res.data && res.data.success) {
+          const rows = res.data.data.map((r) => {
+            const attributes = r.attributes || {};
+            const geometry = r.geometry || {};
+            const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
+            return {
+              id: r.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              attributes,
+              geometry,
+              elementType,
+              color: getLayerStyle(r.name || layerName, elementType).color,
+            };
+          });
 
-        // Group data by element type
-        const grouped = {};
-        rows.forEach((row) => {
-          const type = row.elementType;
-          if (!grouped[type]) {
-            grouped[type] = [];
+          setData(rows);
+
+          const grouped = {};
+          rows.forEach((row) => {
+            const type = row.elementType;
+            if (!grouped[type]) grouped[type] = [];
+            grouped[type].push(row);
+          });
+          setGroupedData(grouped);
+
+          if (res.data.pagination) {
+            setTotalPages(res.data.pagination.totalPages || 1);
+            setCurrentPage(res.data.pagination.currentPage || page);
           }
-          grouped[type].push(row);
-        });
-        setGroupedData(grouped);
 
-        // Set pagination info
-        if (res.data.pagination) {
-          setTotalPages(res.data.pagination.totalPages);
-          setCurrentPage(res.data.pagination.currentPage);
+          if (rows.length > 0) {
+            const initialColumns = {
+              id: true,
+              ...Object.keys(rows[0].attributes || {}).reduce((acc, key) => {
+                acc[`attributes.${key}`] = true;
+                return acc;
+              }, {}),
+              geometry: true,
+              color: true,
+            };
+            setVisibleColumns(initialColumns);
+
+            setColumnOrder([
+              "id",
+              ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
+              "geometry",
+              "color",
+            ]);
+          }
+
+          if (res.data.layerInfo) {
+            setLayerInfo(res.data.layerInfo);
+          }
+        } else {
+          throw new Error("Invalid response format from server");
         }
-
-        // Initialize visible columns based on first item's structure
-        if (rows.length > 0) {
-          const initialColumns = {
-            id: true,
-            ...Object.keys(rows[0].attributes || {}).reduce((acc, key) => {
-              acc[`attributes.${key}`] = true;
-              return acc;
-            }, {}),
-            geometry: true,
-            color: true,
-          };
-          setVisibleColumns(initialColumns);
-
-          // Set column order
-          setColumnOrder([
-            "id",
-            ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
-            "geometry",
-            "color",
-          ]);
-        }
-
-        // Set layer info if available
-        if (res.data.layerInfo) {
-          setLayerInfo(res.data.layerInfo);
-        }
+      } catch (err) {
+        console.error("Fetch data error:", err);
+        const errorMessage =
+          err.response?.data?.error ||
+          (err.message === "Network Error" ? "Failed to connect to the server." : "Failed to fetch data.");
+        setError(errorMessage);
+        toast.error(errorMessage);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error(err);
-      if (err.response?.status === 400) {
-        toast.error("Invalid request. Please check the layer name.");
-        setIsValidLayer(false);
-      } else if (err.response?.status === 404) {
-        toast.error("Layer not found.");
-        setIsValidLayer(false);
-      } else if (err.code === "ERR_NETWORK") {
-        toast.error("Network error. Please check your connection.");
-      } else {
-        toast.error("Failed to fetch data");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [layerName, limit, token]
+  );
 
   useEffect(() => {
-    // Validate layerName on component mount
-    validateLayerName();
-    
-    if (isValidLayer && token) {
+    if (layerName && validLayers.includes(layerName) && token) {
       fetchData(1, selectedElement);
     }
-  }, [layerName, limit, token, selectedElement, isValidLayer]);
+  }, [layerName, token, selectedElement, fetchData]);
 
-  const handleElementChange = (elementType) => {
-    setSelectedElement(elementType);
-    setActiveTab(elementType);
-    // Reset to first page when changing element type
-    fetchData(1, elementType);
-  };
+  const handleElementChange = useCallback(
+    (elementType) => {
+      setSelectedElement(elementType);
+      setActiveTab(elementType);
+      setCurrentPage(1);
+      setSelectedRows(new Set());
+      fetchData(1, elementType);
+    },
+    [fetchData]
+  );
+
+  const debouncedSearch = useCallback(
+    debounce((term) => {
+      setLoading(true);
+      const result =
+        term.toLowerCase() === "all data"
+          ? data
+          : data.filter(
+              (f) =>
+                Object.values(f.attributes).some((val) =>
+                  val?.toString().toLowerCase().includes(term.toLowerCase())
+                ) ||
+                f.id?.toString().toLowerCase().includes(term.toLowerCase()) ||
+                JSON.stringify(f.geometry).toLowerCase().includes(term.toLowerCase()) ||
+                f.color?.toLowerCase().includes(term.toLowerCase())
+            );
+
+      const grouped = {};
+      result.forEach((row) => {
+        const type = row.elementType;
+        if (!grouped[type]) grouped[type] = [];
+        grouped[type].push(row);
+      });
+      setGroupedData(grouped);
+
+      setLoading(false);
+      toast.success(`Query run successfully. Rows found: ${result.length}`);
+    }, 500),
+    [data]
+  );
 
   const executeQuery = () => {
-    setLoading(true);
-    const result =
-      searchTerm.toLowerCase() === "all data"
-        ? data
-        : data.filter(
-            (f) =>
-              Object.values(f.attributes).some((val) =>
-                val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-              ) ||
-              f.id?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-              JSON.stringify(f.geometry).toLowerCase().includes(searchTerm.toLowerCase()) ||
-              f.color?.toLowerCase().includes(searchTerm.toLowerCase())
-          );
-
-    // Regroup the filtered data
-    const grouped = {};
-    result.forEach((row) => {
-      const type = row.elementType;
-      if (!grouped[type]) {
-        grouped[type] = [];
-      }
-      grouped[type].push(row);
-    });
-    setGroupedData(grouped);
-
-    setLoading(false);
-    toast.success(`Query run successfully. Rows found: ${result.length}`);
+    debouncedSearch(searchTerm);
   };
 
   const toggleRow = (id) => {
@@ -2340,19 +2330,63 @@ function DataView() {
     setVisibleColumns((prev) => ({ ...prev, [column]: !prev[column] }));
   };
 
-  // Function to render value based on its type
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const handleRowSelect = (id) => {
+    setSelectedRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortConfig.key) return data;
+
+    const sorted = [...data];
+    sorted.sort((a, b) => {
+      let aValue = sortConfig.key.startsWith("attributes.")
+        ? a.attributes[sortConfig.key.replace("attributes.", "")]
+        : a[sortConfig.key];
+      let bValue = sortConfig.key.startsWith("attributes.")
+        ? b.attributes[sortConfig.key.replace("attributes.", "")]
+        : b[sortConfig.key];
+
+      if (aValue === null || aValue === undefined) aValue = "";
+      if (bValue === null || bValue === undefined) bValue = "";
+
+      if (typeof aValue === "object") aValue = JSON.stringify(aValue);
+      if (typeof bValue === "object") bValue = JSON.stringify(bValue);
+
+      return sortConfig.direction === "asc"
+        ? aValue.toString().localeCompare(bValue.toString())
+        : bValue.toString().localeCompare(aValue.toString());
+    });
+
+    const grouped = {};
+    sorted.forEach((row) => {
+      const type = row.elementType;
+      if (!grouped[type]) grouped[type] = [];
+      grouped[type].push(row);
+    });
+    setGroupedData(grouped);
+    return sorted;
+  }, [data, sortConfig]);
+
   const renderValue = (value, isGeometry = false) => {
     if (value === null || value === undefined) return "N/A";
-
     if (typeof value === "object") {
       if (isGeometry) {
         const geomType = value.type || "Unknown";
-        const coordCount = value.coordinates ? JSON.stringify(value.coordinates).length : 0;
         return (
           <div>
-            <div>
-              <strong>Type:</strong> {geomType}
-            </div>
+            <div><strong>Type:</strong> {geomType}</div>
             <div>
               <span style={expandStyle} onClick={() => toggleRow(value)}>
                 {expandedRows[value] ? "Hide Coordinates" : "Show Coordinates"}
@@ -2366,7 +2400,6 @@ function DataView() {
           </div>
         );
       }
-
       return expandedRows[value] ? (
         <pre style={{ maxHeight: "200px", overflow: "auto" }}>
           {JSON.stringify(value, null, 2)}
@@ -2379,8 +2412,6 @@ function DataView() {
         </span>
       );
     }
-
-    // For very long strings, truncate and show expand option
     if (typeof value === "string" && value.length > 100) {
       return expandedRows[value] ? (
         <div>
@@ -2394,14 +2425,10 @@ function DataView() {
         </div>
       );
     }
-
     return value.toString();
   };
 
-  // --- Export Functions ---
   const exportCSV = () => {
-    if (!isValidLayer) return;
-    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       Object.entries(row.attributes || {}).forEach(([key, value]) => {
@@ -2422,8 +2449,6 @@ function DataView() {
   };
 
   const exportJSON = () => {
-    if (!isValidLayer) return;
-    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       return { id: row.id, attributes: row.attributes, geometry: row.geometry, color: row.color };
     });
@@ -2437,8 +2462,6 @@ function DataView() {
   };
 
   const exportXLSX = () => {
-    if (!isValidLayer) return;
-    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       Object.entries(row.attributes || {}).forEach(([key, value]) => {
@@ -2454,7 +2477,7 @@ function DataView() {
     XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
   };
 
-  // --- Inline CSS ---
+  // Inline CSS
   const containerStyle = { maxWidth: "95%", margin: "40px auto", padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" };
   const titleStyle = { fontSize: 32, fontWeight: "bold", marginBottom: 20, textAlign: "center", color: "#1f2937" };
   const controlsStyle = { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 20, alignItems: "center" };
@@ -2473,7 +2496,7 @@ function DataView() {
   });
   const tableContainerStyle = { overflowX: "auto", borderRadius: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", border: "1px solid #e5e7eb", marginBottom: 20 };
   const tableStyle = { width: "100%", borderCollapse: "collapse", minWidth: "max-content" };
-  const thStyle = { backgroundColor: "#f3f4f6", color: "#374151", textAlign: "left", fontWeight: "600", padding: "12px 16px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0 };
+  const thStyle = { backgroundColor: "#f3f4f6", color: "#374151", textAlign: "left", fontWeight: "600", padding: "12px 16px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, cursor: "pointer" };
   const tdStyle = { padding: "12px 16px", borderBottom: "1px solid #e5e7eb", color: "#1f2937", fontSize: 14, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" };
   const expandStyle = { fontSize: 12, color: "#3b82f6", cursor: "pointer", marginLeft: 10 };
   const checkboxContainer = { display: "flex", gap: 15, flexWrap: "wrap", marginBottom: 15, padding: 10, backgroundColor: "#f9fafb", borderRadius: 8 };
@@ -2484,10 +2507,8 @@ function DataView() {
   const tabStyle = { padding: "10px 20px", borderRadius: 8, border: "1px solid #d1d5db", backgroundColor: "#f9fafb", cursor: "pointer" };
   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
   const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
-  const errorContainerStyle = { textAlign: "center", padding: "40px 20px", backgroundColor: "#fef2f2", borderRadius: "8px", border: "1px solid #fecaca" };
-  const homeButtonStyle = { ...buttonStyle("#3b82f6"), marginLeft: "10px" };
+  const errorStyle = { textAlign: "center", padding: 40, color: "#ef4444", fontSize: 18 };
 
-  // Function to render a table for a specific element type
   const renderElementTable = (elementType, elementData) => {
     return (
       <div key={elementType} style={tableContainerStyle}>
@@ -2497,11 +2518,35 @@ function DataView() {
         <table style={tableStyle}>
           <thead>
             <tr>
+              <th style={thStyle}>
+                <input
+                  type="checkbox"
+                  checked={elementData.every((item) => selectedRows.has(item.id))}
+                  onChange={() => {
+                    const newSet = new Set(selectedRows);
+                    if (elementData.every((item) => selectedRows.has(item.id))) {
+                      elementData.forEach((item) => newSet.delete(item.id));
+                    } else {
+                      elementData.forEach((item) => newSet.add(item.id));
+                    }
+                    setSelectedRows(newSet);
+                  }}
+                  aria-label="Select all rows"
+                />
+              </th>
               {columnOrder.map(
                 (col) =>
                   visibleColumns[col] && (
-                    <th key={col} style={thStyle}>
+                    <th
+                      key={col}
+                      style={thStyle}
+                      onClick={() => handleSort(col)}
+                      aria-label={`Sort by ${col.startsWith("attributes.") ? col.replace("attributes.", "") : col}`}
+                    >
                       {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
+                      {sortConfig.key === col && (
+                        <span>{sortConfig.direction === "asc" ? " ▲" : " ▼"}</span>
+                      )}
                     </th>
                   )
               )}
@@ -2510,7 +2555,18 @@ function DataView() {
           </thead>
           <tbody>
             {elementData.map((item, index) => (
-              <tr key={item.id} style={{ backgroundColor: index % 2 === 0 ? "#f9fafb" : "#fff" }}>
+              <tr
+                key={item.id}
+                style={{ backgroundColor: selectedRows.has(item.id) ? "#dbeafe" : index % 2 === 0 ? "#f9fafb" : "#fff" }}
+              >
+                <td style={tdStyle}>
+                  <input
+                    type="checkbox"
+                    checked={selectedRows.has(item.id)}
+                    onChange={() => handleRowSelect(item.id)}
+                    aria-label={`Select row ${item.id}`}
+                  />
+                </td>
                 {columnOrder.map(
                   (col) =>
                     visibleColumns[col] && (
@@ -2526,7 +2582,7 @@ function DataView() {
                 )}
                 <td style={tdStyle}>
                   <span style={expandStyle} onClick={() => toggleRow(item.id)}>
-                    {expandedRows[item.id] ? "Collapse All" : "Expand All"}
+                    {expandedRows[item.id] ? "Collapse" : "Expand"}
                   </span>
                 </td>
               </tr>
@@ -2537,39 +2593,32 @@ function DataView() {
     );
   };
 
-  // Get the data to display based on selection
   const getDataToDisplay = () => {
-    if (selectedElement === "all") {
-      return groupedData;
-    } else {
-      return { [selectedElement]: groupedData[selectedElement] || [] };
-    }
+    return selectedElement === "all" ? groupedData : { [selectedElement]: groupedData[selectedElement] || [] };
   };
 
-  // Show error if layer is invalid
-  if (!isValidLayer) {
+  const getAvailableElementTypes = () => {
+    const availableTypes = new Set(Object.keys(groupedData));
+    return dataTypes.filter((dt) => availableTypes.has(dt.key));
+  };
+
+  if (!layerName || layerName === "(empty)" || !validLayers.includes(layerName)) {
     return (
       <div style={containerStyle}>
-        <div style={errorContainerStyle}>
-          <h2 style={{ color: "#dc2626" }}>Invalid Layer</h2>
-          <p>The layer name "{layerDisplayName}" is not valid or does not exist.</p>
-          <div>
-            <button 
-              onClick={() => navigate(-1)} 
-              style={buttonStyle("#dc2626")}
-            >
-              Go Back
-            </button>
-            <button 
-              onClick={() => navigate("/")} 
-              style={homeButtonStyle}
-            >
-              Go Home
-            </button>
-          </div>
-          <p style={{ marginTop: "20px", fontSize: "14px", color: "#6b7280" }}>
-            Please check that you have accessed this page through the proper navigation flow.
-          </p>
+        <ToastContainer />
+        <h1 style={titleStyle}>Data View</h1>
+        <p style={errorStyle}>
+          {error || `Invalid layer: "${layerName || '(empty)'}" is not valid or does not exist.`}
+          <br />
+          Please select a valid layer from the data management page.
+        </p>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
+          <button onClick={() => navigate(-1)} style={buttonStyle("#2563eb")} aria-label="Go back">
+            Go Back
+          </button>
+          <button onClick={() => navigate("/")} style={buttonStyle("#22c55e")} aria-label="Go to home">
+            Go Home
+          </button>
         </div>
       </div>
     );
@@ -2578,153 +2627,193 @@ function DataView() {
   return (
     <div style={containerStyle}>
       <ToastContainer />
-      <h1 style={titleStyle}>Data View - {layerDisplayName}</h1>
+      <h1 style={titleStyle}>Data View - {layerName}</h1>
 
-      {/* Layer Info */}
-      {Object.keys(layerInfo).length > 0 && (
+      {error && (
+        <div style={errorStyle}>
+          {error}
+          <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 10 }}>
+            <button onClick={() => navigate(-1)} style={buttonStyle("#2563eb")} aria-label="Go back">
+              Go Back
+            </button>
+            <button onClick={() => navigate("/")} style={buttonStyle("#22c55e")} aria-label="Go to home">
+              Go Home
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!error && Object.keys(layerInfo).length > 0 && (
         <div style={{ marginBottom: 20, padding: 15, backgroundColor: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
           <h3 style={{ margin: "0 0 10px 0", color: "#0369a1" }}>Layer Information</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {Object.entries(layerInfo).map(([key, value]) => (
               <div key={key}>
-                <strong>{key}:</strong> {value?.toString()}
+                <strong>{key}:</strong> {typeof value === "object" ? JSON.stringify(value) : value?.toString()}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Controls */}
-      <div style={controlsStyle}>
-        <input
-          type="text"
-          placeholder="Search across all fields..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={inputStyle}
-          onKeyPress={(e) => e.key === "Enter" && executeQuery()}
-        />
-        <button onClick={executeQuery} style={buttonStyle("#22c55e")}>
-          Search
-        </button>
-        <button onClick={exportCSV} style={buttonStyle("#2563eb")}>
-          Export CSV
-        </button>
-        <button onClick={exportJSON} style={buttonStyle("#8b5cf6")}>
-          Export JSON
-        </button>
-        <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
-          Export XLSX
-        </button>
-
-        {/* Page size selector */}
-        <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
-          <option value={10}>10 rows</option>
-          <option value={25}>25 rows</option>
-          <option value={50}>50 rows</option>
-          <option value={100}>100 rows</option>
-        </select>
-      </div>
-
-      {/* Element type selector */}
-      <div style={{ marginBottom: 20 }}>
-        <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
-          Select Element Type:
-        </label>
-        <select
-          id="elementSelector"
-          value={selectedElement}
-          onChange={(e) => handleElementChange(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="all">All Elements</option>
-          {dataTypes.map((type) => (
-            <option key={type.key} value={type.key}>
-              {type.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Column toggle */}
-      {columnOrder.length > 0 && (
-        <div style={checkboxContainer}>
-          <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
-          {columnOrder.map((col) => (
-            <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
-              <input type="checkbox" checked={visibleColumns[col] || false} onChange={() => toggleColumn(col)} style={{ marginRight: 6 }} />
-              {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
-            </label>
-          ))}
-        </div>
-      )}
-
-      {/* Tabs for different element types */}
-      <div style={tabContainerStyle}>
-        <div
-          style={activeTab === "all" ? activeTabStyle : tabStyle}
-          onClick={() => handleElementChange("all")}
-        >
-          All Elements
-        </div>
-        {dataTypes.map((type) => (
-          <div
-            key={type.key}
-            style={activeTab === type.key ? activeTabStyle : tabStyle}
-            onClick={() => handleElementChange(type.key)}
-          >
-            {type.label}
+      {!error && (
+        <>
+          <div style={controlsStyle}>
+            <input
+              type="text"
+              placeholder="Search across all fields..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={inputStyle}
+              onKeyPress={(e) => e.key === "Enter" && executeQuery()}
+              aria-label="Search data"
+            />
+            <button onClick={executeQuery} style={buttonStyle("#22c55e")} aria-label="Execute search">
+              Search
+            </button>
+            <button onClick={exportCSV} style={buttonStyle("#2563eb")} aria-label="Export as CSV">
+              Export CSV
+            </button>
+            <button onClick={exportJSON} style={buttonStyle("#8b5cf6")} aria-label="Export as JSON">
+              Export JSON
+            </button>
+            <button onClick={exportXLSX} style={buttonStyle("#ec4899")} aria-label="Export as XLSX">
+              Export XLSX
+            </button>
+            <select
+              value={limit}
+              onChange={(e) => setLimit(parseInt(e.target.value))}
+              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}
+              aria-label="Select page size"
+            >
+              <option value={10}>10 rows</option>
+              <option value={25}>25 rows</option>
+              <option value={50}>50 rows</option>
+              <option value={100}>100 rows</option>
+            </select>
           </div>
-        ))}
-      </div>
 
-      {/* Tables */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
-      ) : Object.keys(getDataToDisplay()).length > 0 ? (
-        Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
-      ) : (
-        <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
-      )}
+          <div style={{ marginBottom: 20 }}>
+            <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
+              Select Element Type:
+            </label>
+            <select
+              id="elementSelector"
+              value={selectedElement}
+              onChange={(e) => handleElementChange(e.target.value)}
+              style={selectStyle}
+              aria-label="Select element type"
+            >
+              <option value="all">All Elements</option>
+              {dataTypes.map((type) => (
+                <option key={type.key} value={type.key}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={paginationStyle}>
-          <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
-            Previous
-          </button>
+          {columnOrder.length > 0 && (
+            <div style={checkboxContainer}>
+              <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
+              {columnOrder.map((col) => (
+                <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns[col] || false}
+                    onChange={() => toggleColumn(col)}
+                    style={{ marginRight: 6 }}
+                    aria-label={`Toggle ${col.startsWith("attributes.") ? col.replace("attributes.", "") : col} column`}
+                  />
+                  {col.startsWith("attributes.") ? col.replace("attributes.", "") : col}
+                </label>
+              ))}
+            </div>
+          )}
 
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum;
-            if (currentPage <= 3) {
-              pageNum = i + 1;
-            } else if (currentPage >= totalPages - 2) {
-              pageNum = totalPages - 4 + i;
-            } else {
-              pageNum = currentPage - 2 + i;
-            }
-
-            if (pageNum < 1 || pageNum > totalPages) return null;
-
-            return (
-              <button
-                key={pageNum}
-                onClick={() => fetchData(pageNum, selectedElement)}
-                style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
+          <div style={tabContainerStyle}>
+            <div
+              style={activeTab === "all" ? activeTabStyle : tabStyle}
+              onClick={() => handleElementChange("all")}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => e.key === "Enter" && handleElementChange("all")}
+              aria-label="View all elements"
+            >
+              All Elements
+            </div>
+            {getAvailableElementTypes().map((type) => (
+              <div
+                key={type.key}
+                style={activeTab === type.key ? activeTabStyle : tabStyle}
+                onClick={() => handleElementChange(type.key)}
+                role="button"
+                tabIndex={0}
+                onKeyPress={(e) => e.key === "Enter" && handleElementChange(type.key)}
+                aria-label={`View ${type.label}`}
               >
-                {pageNum}
+                {type.label}
+              </div>
+            ))}
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40 }} aria-live="polite">
+              Loading...
+            </div>
+          ) : Object.keys(getDataToDisplay()).length > 0 ? (
+            Object.entries(getDataToDisplay()).map(([elementType, elementData]) => renderElementTable(elementType, elementData))
+          ) : (
+            <div style={{ textAlign: "center", padding: 40 }} aria-live="polite">
+              No data found for this element type.
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div style={paginationStyle}>
+              <button
+                onClick={() => fetchData(currentPage - 1, selectedElement)}
+                disabled={currentPage === 1}
+                style={pageButtonStyle}
+                aria-label="Previous page"
+              >
+                Previous
               </button>
-            );
-          })}
-
-          <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
-            Next
-          </button>
-
-          <span style={{ marginLeft: 10 }}>
-            Page {currentPage} of {totalPages}
-          </span>
-        </div>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                if (pageNum < 1 || pageNum > totalPages) return null;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => fetchData(pageNum, selectedElement)}
+                    style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
+                    aria-label={`Go to page ${pageNum}`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => fetchData(currentPage + 1, selectedElement)}
+                disabled={currentPage === totalPages}
+                style={pageButtonStyle}
+                aria-label="Next page"
+              >
+                Next
+              </button>
+              <span style={{ marginLeft: 10 }} aria-live="polite">
+                Page {currentPage} of {totalPages}
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
