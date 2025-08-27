@@ -929,7 +929,7 @@
 // export default DataView;
 
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -990,7 +990,6 @@ function DataView() {
 
   const { layerName } = useParams();
   const token = localStorage.getItem("token");
-  const navigate = useNavigate();
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
@@ -1004,7 +1003,6 @@ function DataView() {
 
       if (res.data) {
         const rows = res.data.data.map((r) => {
-          // Ensure data structure matches DataManagement's saved GeoJSON
           const attributes = r.properties || r.attributes || {};
           const geometry = r.geometry || {};
           const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
@@ -1013,7 +1011,7 @@ function DataView() {
             attributes,
             geometry,
             elementType,
-            color: getLayerStyle(r.name || layerName, elementType).color, // Add color for consistency
+            color: getLayerStyle(r.name || layerName, elementType).color,
           };
         });
 
@@ -1045,7 +1043,7 @@ function DataView() {
               return acc;
             }, {}),
             geometry: true,
-            color: true, // Add color column
+            color: true,
           };
           setVisibleColumns(initialColumns);
 
@@ -1181,7 +1179,7 @@ function DataView() {
         obj[key] = typeof value === "object" ? JSON.stringify(value) : value;
       });
       obj.geometry = JSON.stringify(row.geometry);
-      obj.color = row.color; // Include color
+      obj.color = row.color;
       return obj;
     });
     const csv = Papa.unparse(dataToExport);
@@ -1214,7 +1212,7 @@ function DataView() {
         obj[key] = typeof value === "object" ? JSON.stringify(value) : value;
       });
       obj.geometry = JSON.stringify(row.geometry);
-      obj.color = row.color; // Include color
+      obj.color = row.color;
       return obj;
     });
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -1323,16 +1321,6 @@ function DataView() {
     <div style={containerStyle}>
       <ToastContainer />
       <h1 style={titleStyle}>Data View - {layerName}</h1>
-
-      {/* Navigation Buttons */}
-      <div style={{ marginBottom: 20, display: "flex", gap: 10 }}>
-        <button style={buttonStyle("#2563eb")} onClick={() => navigate("/data-view")}>
-          Dataview / Query / Update
-        </button>
-        <button style={buttonStyle("#f43f5e")} onClick={() => navigate("/map")}>
-          MapView
-        </button>
-      </div>
 
       {/* Layer Info */}
       {Object.keys(layerInfo).length > 0 && (
