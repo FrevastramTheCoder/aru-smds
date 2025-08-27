@@ -952,7 +952,7 @@ const dataTypes = [
   { key: "aru_boundary", label: "Aru Boundary" },
 ];
 
-// Layer styles
+// Layer styles from DataManagement
 const getLayerStyle = (name, type) => {
   const styles = {
     aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
@@ -987,6 +987,7 @@ function DataView() {
   const [activeTab, setActiveTab] = useState("all");
   const [selectedElement, setSelectedElement] = useState("all");
   const [error, setError] = useState(null);
+  const [availableLayers, setAvailableLayers] = useState([]);
 
   const { layerName } = useParams();
   const navigate = useNavigate();
@@ -994,29 +995,54 @@ function DataView() {
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Validate layerName
+  // Fetch available layers to help with debugging
+  const fetchAvailableLayers = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/layers`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data && Array.isArray(res.data)) {
+        setAvailableLayers(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch available layers:", err);
+    }
+  };
+
+  // Validate layerName before making API calls
   const validateLayerName = () => {
-    if (!layerName || layerName === "undefined" || !dataTypes.some(dt => dt.key === layerName)) {
-      setError("Invalid layer name. Please select a valid layer from the menu.");
+    if (!layerName || layerName === "undefined") {
+      setError(`Invalid layer name: "${layerName}". Please check the URL and try again.`);
+      
+      // Fetch available layers to help user
+      fetchAvailableLayers();
       return false;
     }
     return true;
   };
 
   const fetchData = async (page = 1, elementType = "all") => {
-    if (!validateLayerName()) return;
+    // Validate layerName before making request
+    if (!validateLayerName()) {
+      return;
+    }
 
     setLoading(true);
     setError(null);
-
+    
     try {
+      // Build the API URL with proper validation
       let url = `${API_BASE}/data/${encodeURIComponent(layerName)}?page=${page}&limit=${limit}`;
+      
+      // Add element type filter if a specific element is selected
       if (elementType && elementType !== "all") {
         url += `&elementType=${encodeURIComponent(elementType)}`;
       }
 
+      console.log("Fetching from URL:", url); // Debug log
+
       const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.data) {
@@ -1035,19 +1061,24 @@ function DataView() {
 
         setData(rows);
 
+        // Group data by element type
         const grouped = {};
         rows.forEach((row) => {
           const type = row.elementType;
-          if (!grouped[type]) grouped[type] = [];
+          if (!grouped[type]) {
+            grouped[type] = [];
+          }
           grouped[type].push(row);
         });
         setGroupedData(grouped);
 
+        // Set pagination info
         if (res.data.pagination) {
           setTotalPages(res.data.pagination.totalPages);
           setCurrentPage(res.data.pagination.currentPage);
         }
 
+        // Initialize visible columns based on first item's structure
         if (rows.length > 0) {
           const initialColumns = {
             id: true,
@@ -1059,6 +1090,8 @@ function DataView() {
             color: true,
           };
           setVisibleColumns(initialColumns);
+
+          // Set column order
           setColumnOrder([
             "id",
             ...Object.keys(rows[0].attributes || {}).map((key) => `attributes.${key}`),
@@ -1067,6 +1100,7 @@ function DataView() {
           ]);
         }
 
+        // Set layer info if available
         if (res.data.layerInfo) {
           setLayerInfo(res.data.layerInfo);
         }
@@ -1074,45 +1108,53 @@ function DataView() {
     } catch (err) {
       console.error("API Error:", err);
       if (err.response?.status === 400) {
-        setError("Invalid request. Please check the layer or parameters.");
+        setError(`Invalid request for layer "${layerName}". Please check if this layer exists.`);
+        fetchAvailableLayers();
       } else if (err.response?.status === 401) {
         setError("Authentication failed. Please log in again.");
-        navigate("/login");
       } else if (err.response?.status === 404) {
-        setError("Layer not found. Please select a valid layer.");
+        setError(`Layer "${layerName}" not found. Please check the layer name.`);
+        fetchAvailableLayers();
       } else {
         setError("Failed to fetch data. Please try again later.");
       }
-      toast.error(err.message || "Failed to fetch data");
+      toast.error("Failed to fetch data");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!token) {
-      setError("Please log in to access this page.");
-      navigate("/login");
-      return;
-    }
-    if (validateLayerName()) {
-      fetchData(1, selectedElement);
+    console.log("Current layerName from params:", layerName); // Debug log
+    if (token) {
+      if (layerName && layerName !== "undefined") {
+        fetchData(1, selectedElement);
+      } else {
+        setError("No layer name provided in URL.");
+        fetchAvailableLayers();
+      }
     } else {
-      navigate("/"); // Redirect to home or a layer selection page
+      setError("Authentication token not found. Please log in.");
     }
-  }, [layerName, limit, token, selectedElement, navigate]);
+  }, [layerName, limit, token, selectedElement]);
 
   const handleElementChange = (elementType) => {
     setSelectedElement(elementType);
     setActiveTab(elementType);
+    // Reset to first page when changing element type
     if (validateLayerName()) {
       fetchData(1, elementType);
     }
   };
 
+  const handleLayerSelect = (selectedLayer) => {
+    // Navigate to the selected layer
+    navigate(`/data-view/${selectedLayer}`);
+  };
+
   const executeQuery = () => {
     if (!validateLayerName()) return;
-
+    
     setLoading(true);
     const result =
       searchTerm.toLowerCase() === "all data"
@@ -1127,10 +1169,13 @@ function DataView() {
               f.color?.toLowerCase().includes(searchTerm.toLowerCase())
           );
 
+    // Regroup the filtered data
     const grouped = {};
     result.forEach((row) => {
       const type = row.elementType;
-      if (!grouped[type]) grouped[type] = [];
+      if (!grouped[type]) {
+        grouped[type] = [];
+      }
       grouped[type].push(row);
     });
     setGroupedData(grouped);
@@ -1147,11 +1192,11 @@ function DataView() {
     setVisibleColumns((prev) => ({ ...prev, [column]: !prev[column] }));
   };
 
+  // Function to render value based on its type
   const renderValue = (value, isGeometry = false) => {
     if (value === null || value === undefined) return "N/A";
 
     if (typeof value === "object") {
-      const valueKey = JSON.stringify(value); // Use stringified object as key
       if (isGeometry) {
         const geomType = value.type || "Unknown";
         return (
@@ -1160,11 +1205,11 @@ function DataView() {
               <strong>Type:</strong> {geomType}
             </div>
             <div>
-              <span style={expandStyle} onClick={() => toggleRow(valueKey)}>
-                {expandedRows[valueKey] ? "Hide Coordinates" : "Show Coordinates"}
+              <span style={expandStyle} onClick={() => toggleRow(value)}>
+                {expandedRows[value] ? "Hide Coordinates" : "Show Coordinates"}
               </span>
             </div>
-            {expandedRows[valueKey] && (
+            {expandedRows[value] && (
               <pre style={{ fontSize: "10px", marginTop: "5px", maxHeight: "200px", overflow: "auto" }}>
                 {JSON.stringify(value, null, 2)}
               </pre>
@@ -1173,12 +1218,12 @@ function DataView() {
         );
       }
 
-      return expandedRows[valueKey] ? (
+      return expandedRows[value] ? (
         <pre style={{ maxHeight: "200px", overflow: "auto" }}>
           {JSON.stringify(value, null, 2)}
         </pre>
       ) : (
-        <span style={expandStyle} onClick={() => toggleRow(valueKey)}>
+        <span style={expandStyle} onClick={() => toggleRow(value)}>
           {Array.isArray(value)
             ? `[Array: ${value.length} items]`
             : `{Object: ${Object.keys(value).length} keys}`}
@@ -1186,6 +1231,7 @@ function DataView() {
       );
     }
 
+    // For very long strings, truncate and show expand option
     if (typeof value === "string" && value.length > 100) {
       return expandedRows[value] ? (
         <div>
@@ -1203,10 +1249,10 @@ function DataView() {
     return value.toString();
   };
 
-  // Export Functions
+  // --- Export Functions ---
   const exportCSV = () => {
     if (!validateLayerName()) return;
-
+    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       Object.entries(row.attributes || {}).forEach(([key, value]) => {
@@ -1228,7 +1274,7 @@ function DataView() {
 
   const exportJSON = () => {
     if (!validateLayerName()) return;
-
+    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       return { id: row.id, attributes: row.attributes, geometry: row.geometry, color: row.color };
     });
@@ -1243,7 +1289,7 @@ function DataView() {
 
   const exportXLSX = () => {
     if (!validateLayerName()) return;
-
+    
     const dataToExport = (selectedElement !== "all" ? groupedData[selectedElement] || [] : Object.values(groupedData).flat()).map((row) => {
       const obj = { id: row.id };
       Object.entries(row.attributes || {}).forEach(([key, value]) => {
@@ -1259,7 +1305,7 @@ function DataView() {
     XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
   };
 
-  // Inline CSS
+  // --- Inline CSS ---
   const containerStyle = { maxWidth: "95%", margin: "40px auto", padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" };
   const titleStyle = { fontSize: 32, fontWeight: "bold", marginBottom: 20, textAlign: "center", color: "#1f2937" };
   const controlsStyle = { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 20, alignItems: "center" };
@@ -1290,7 +1336,9 @@ function DataView() {
   const activeTabStyle = { ...tabStyle, backgroundColor: "#3b82f6", color: "#fff", borderColor: "#3b82f6" };
   const selectStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 15 };
   const errorStyle = { backgroundColor: "#fee2e2", color: "#dc2626", padding: "15px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #fecaca" };
+  const layerListStyle = { backgroundColor: "#f0f9ff", padding: "15px", borderRadius: "8px", marginTop: "15px", border: "1px solid #bae6fd" };
 
+  // Function to render a table for a specific element type
   const renderElementTable = (elementType, elementData) => {
     return (
       <div key={elementType} style={tableContainerStyle}>
@@ -1340,6 +1388,7 @@ function DataView() {
     );
   };
 
+  // Get the data to display based on selection
   const getDataToDisplay = () => {
     if (selectedElement === "all") {
       return groupedData;
@@ -1351,59 +1400,56 @@ function DataView() {
   return (
     <div style={containerStyle}>
       <ToastContainer />
-      <h1 style={titleStyle}>
-        Data View - {dataTypes.find(dt => dt.key === layerName)?.label || "Unknown Layer"}
-      </h1>
+      <h1 style={titleStyle}>Data View - {layerName || "Unknown Layer"}</h1>
 
+      {/* Error Display */}
       {error && (
         <div style={errorStyle}>
           <strong>Error:</strong> {error}
-          <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => navigate("/")}
-              style={buttonStyle("#2563eb")}
-            >
-              Go to Home
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              style={buttonStyle("#dc2626")}
-            >
-              Reload Page
-            </button>
-          </div>
-          <div style={{ marginTop: "10px" }}>
-            <label style={{ fontWeight: "bold" }}>Select a Layer:</label>
-            <select
-              onChange={(e) => navigate(`/data/${e.target.value}`)}
-              style={selectStyle}
-            >
-              <option value="">Select a layer</option>
-              {dataTypes.map((type) => (
-                <option key={type.key} value={type.key}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+          
+          {/* Show available layers if we have them */}
+          {availableLayers.length > 0 && (
+            <div style={layerListStyle}>
+              <h4>Available Layers:</h4>
+              <select 
+                onChange={(e) => handleLayerSelect(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">Select a layer...</option>
+                {availableLayers.map((layer) => (
+                  <option key={layer} value={layer}>
+                    {layer}
+                  </option>
+                ))}
+              </select>
+              <button 
+                onClick={() => window.location.reload()} 
+                style={buttonStyle("#dc2626")}
+              >
+                Reload Page
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Layer Info */}
+      {Object.keys(layerInfo).length > 0 && (
+        <div style={{ marginBottom: 20, padding: 15, backgroundColor: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
+          <h3 style={{ margin: "0 0 10px 0", color: "#0369a1" }}>Layer Information</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+            {Object.entries(layerInfo).map(([key, value]) => (
+              <div key={key}>
+                <strong>{key}:</strong> {value?.toString()}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {!error && (
+      {/* Controls */}
+      {!error && layerName && layerName !== "undefined" && (
         <>
-          {Object.keys(layerInfo).length > 0 && (
-            <div style={{ marginBottom: 20, padding: 15, backgroundColor: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
-              <h3 style={{ margin: "0 0 10px 0", color: "#0369a1" }}>Layer Information</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-                {Object.entries(layerInfo).map(([key, value]) => (
-                  <div key={key}>
-                    <strong>{key}:</strong> {value?.toString()}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div style={controlsStyle}>
             <input
               type="text"
@@ -1425,7 +1471,9 @@ function DataView() {
             <button onClick={exportXLSX} style={buttonStyle("#ec4899")}>
               Export XLSX
             </button>
-            <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={selectStyle}>
+
+            {/* Page size selector */}
+            <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}>
               <option value={10}>10 rows</option>
               <option value={25}>25 rows</option>
               <option value={50}>50 rows</option>
@@ -1433,6 +1481,7 @@ function DataView() {
             </select>
           </div>
 
+          {/* Element type selector */}
           <div style={{ marginBottom: 20 }}>
             <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
               Select Element Type:
@@ -1452,6 +1501,7 @@ function DataView() {
             </select>
           </div>
 
+          {/* Column toggle */}
           {columnOrder.length > 0 && (
             <div style={checkboxContainer}>
               <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
@@ -1464,6 +1514,7 @@ function DataView() {
             </div>
           )}
 
+          {/* Tabs for different element types */}
           <div style={tabContainerStyle}>
             <div
               style={activeTab === "all" ? activeTabStyle : tabStyle}
@@ -1482,6 +1533,7 @@ function DataView() {
             ))}
           </div>
 
+          {/* Tables */}
           {loading ? (
             <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
           ) : Object.keys(getDataToDisplay()).length > 0 ? (
@@ -1490,11 +1542,13 @@ function DataView() {
             <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
           )}
 
+          {/* Pagination */}
           {totalPages > 1 && (
             <div style={paginationStyle}>
               <button onClick={() => fetchData(currentPage - 1, selectedElement)} disabled={currentPage === 1} style={pageButtonStyle}>
                 Previous
               </button>
+
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 let pageNum;
                 if (currentPage <= 3) {
@@ -1504,7 +1558,9 @@ function DataView() {
                 } else {
                   pageNum = currentPage - 2 + i;
                 }
+
                 if (pageNum < 1 || pageNum > totalPages) return null;
+
                 return (
                   <button
                     key={pageNum}
@@ -1515,9 +1571,11 @@ function DataView() {
                   </button>
                 );
               })}
+
               <button onClick={() => fetchData(currentPage + 1, selectedElement)} disabled={currentPage === totalPages} style={pageButtonStyle}>
                 Next
               </button>
+
               <span style={{ marginLeft: 10 }}>
                 Page {currentPage} of {totalPages}
               </span>
