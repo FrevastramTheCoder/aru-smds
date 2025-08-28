@@ -618,13 +618,14 @@
 
 // export default DataView;
 
-import React, { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import React, { useEffect, useState, useCallback } from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom"; // Added useNavigate
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+import debounce from "lodash/debounce"; // Added lodash for debouncing
 
 // Predefined data types (aligned with DataManagement)
 const dataTypes = [
@@ -692,6 +693,7 @@ function DataView() {
 
   const { layerName } = useParams();
   const location = useLocation();
+  const navigate = useNavigate(); // Added for redirection
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
@@ -700,7 +702,12 @@ function DataView() {
   useEffect(() => {
     console.log("[DataView] Current route params:", { layerName });
     console.log("[DataView] Current location:", location);
-  }, [layerName, location]);
+    if (!layerName || !dataTypes.some((dt) => dt.key === layerName)) {
+      console.error("[DataView] Invalid or missing layerName:", layerName);
+      toast.error("Invalid layer name. Redirecting to home.");
+      navigate("/"); // Redirect to a safe route
+    }
+  }, [layerName, location, navigate]);
 
   const fetchData = async (page = 1, elementType = "all") => {
     if (!layerName) {
@@ -717,7 +724,7 @@ function DataView() {
         url += `&elementType=${elementType}`;
       }
 
-      console.log("[DataView] Fetching URL:", url); // Log the URL for debugging
+      console.log("[DataView] Fetching URL:", url);
 
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -791,23 +798,32 @@ function DataView() {
     }
   };
 
+  // Debounced version of handleElementChange to prevent rapid calls
+  const debouncedHandleElementChange = useCallback(
+    debounce((elementType) => {
+      setSelectedElement(elementType);
+      setActiveTab(elementType);
+      if (layerName && dataTypes.some((dt) => dt.key === layerName)) {
+        fetchData(1, elementType);
+      } else {
+        console.error("[DataView] Cannot fetch data due to invalid layerName:", layerName);
+        toast.error("Invalid layer name. Please select a valid layer.");
+      }
+    }, 300), // 300ms debounce delay
+    [layerName]
+  );
+
   useEffect(() => {
     if (!token) {
       toast.error("Please log in to view data");
       return;
     }
-    if (!layerName) {
-      toast.error("Layer name is missing. Please check the URL.");
+    if (!layerName || !dataTypes.some((dt) => dt.key === layerName)) {
+      toast.error("Layer name is missing or invalid. Please check the URL.");
       return;
     }
     fetchData(1, selectedElement);
   }, [layerName, limit, token, selectedElement]);
-
-  const handleElementChange = (elementType) => {
-    setSelectedElement(elementType);
-    setActiveTab(elementType);
-    fetchData(1, elementType);
-  };
 
   const executeQuery = () => {
     setLoading(true);
@@ -853,7 +869,6 @@ function DataView() {
       if (isGeometry) {
         const geomType = value.type || "Unknown";
         const isPoint = geomType === "Point";
-        const coordCount = value.coordinates ? JSON.stringify(value.coordinates).length : 0;
         return (
           <div>
             <div>
@@ -923,7 +938,7 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
+    a.download = `${layerName || "data"}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -936,7 +951,7 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
+    a.download = `${layerName || "data"}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -1139,7 +1154,7 @@ function DataView() {
         <select
           id="elementSelector"
           value={selectedElement}
-          onChange={(e) => handleElementChange(e.target.value)}
+          onChange={(e) => debouncedHandleElementChange(e.target.value)}
           style={selectStyle}
         >
           <option value="all">All Elements</option>
@@ -1173,7 +1188,7 @@ function DataView() {
       <div style={tabContainerStyle}>
         <div
           style={activeTab === "all" ? activeTabStyle : tabStyle}
-          onClick={() => handleElementChange("all")}
+          onClick={() => debouncedHandleElementChange("all")}
         >
           All Elements
         </div>
@@ -1183,7 +1198,7 @@ function DataView() {
             <div
               key={type.key}
               style={activeTab === type.key ? activeTabStyle : tabStyle}
-              onClick={() => handleElementChange(type.key)}
+              onClick={() => debouncedHandleElementChange(type.key)}
             >
               {type.label}
             </div>
