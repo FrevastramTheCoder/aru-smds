@@ -438,7 +438,7 @@ function DataView() {
   const [selectedElement, setSelectedElement] = useState("all");
   const [apiError, setApiError] = useState(null);
 
-  // Fetch data like MapView
+  // Fetch data from the backend
   const fetchData = async (page = 1, elementType = "all") => {
     // Check if layerName is available
     if (!layerName) {
@@ -449,59 +449,39 @@ function DataView() {
     setLoading(true);
     setApiError(null);
     try {
-      // Try different API endpoint formats
-      const apiFormats = [
-        `${API_BASE}/data/${layerName}`, // Original format
-        `${API_BASE}/data/${layerName.replace(/_/g, '-')}`, // kebab-case format
-        `${API_BASE}/${layerName}`, // Direct endpoint
-        `${API_BASE}/${layerName.replace(/_/g, '-')}`, // Direct endpoint with kebab-case
-      ];
-
-      let url;
-      let res;
-      let lastError;
-
-      // Try each API format until one works
-      for (const format of apiFormats) {
-        try {
-          url = `${format}?page=${page}&limit=${limit}`;
-          if (elementType !== "all") {
-            url += `&elementType=${elementType}`;
-          }
-
-          console.log("Trying API endpoint:", url);
-          res = await axios.get(url, { 
-            headers: { 
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            timeout: 10000 // 10 second timeout
-          });
-
-          // If we get a successful response, break out of the loop
-          if (res.data) {
-            break;
-          }
-        } catch (err) {
-          lastError = err;
-          console.log(`API endpoint ${url} failed:`, err.message);
-          // Continue to next format
-        }
+      // Use the correct API endpoint format based on your backend
+      let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
+      
+      // Add elementType filter if specified
+      if (elementType !== "all") {
+        url += `&elementType=${elementType}`;
       }
 
-      // If all formats failed, throw the last error
-      if (!res) {
-        throw lastError || new Error("All API endpoint formats failed");
-      }
+      console.log("Fetching data from:", url);
+
+      const res = await axios.get(url, { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      });
+
+      console.log("API Response:", res.data);
 
       if (res.data?.success) {
+        // Transform the data to match our frontend structure
         const rows = res.data.data.map((r) => {
           const attributes = r.attributes || {};
           const geometry = r.geometry || {};
-          const elementType = r.elementType || layerName || "unknown";
+          
+          // Extract elementType from attributes or use layerName as fallback
+          const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
+          
           const style = getLayerStyle(elementType);
+          
           return {
-            id: r.id || r._id || Math.random().toString(36).substr(2, 9), // Fallback ID
+            id: r.id,
             attributes,
             geometry,
             elementType,
@@ -549,36 +529,7 @@ function DataView() {
 
         if (res.data.layerInfo) setLayerInfo(res.data.layerInfo);
       } else {
-        // Handle case where data is directly in response (without success wrapper)
-        if (Array.isArray(res.data)) {
-          const rows = res.data.map((r) => {
-            const attributes = r.attributes || {};
-            const geometry = r.geometry || {};
-            const elementType = r.elementType || layerName || "unknown";
-            const style = getLayerStyle(elementType);
-            return {
-              id: r.id || r._id || Math.random().toString(36).substr(2, 9),
-              attributes,
-              geometry,
-              elementType,
-              color: style.color,
-              pointRadius: geometry.type === "Point" ? getPointRadius(elementType) : null,
-            };
-          });
-
-          setData(rows);
-
-          // Group by elementType
-          const grouped = {};
-          rows.forEach((row) => {
-            const type = row.elementType;
-            if (!grouped[type]) grouped[type] = [];
-            grouped[type].push(row);
-          });
-          setGroupedData(grouped);
-        } else {
-          toast.error(res.data?.error || "Failed to fetch data");
-        }
+        toast.error(res.data?.error || "Failed to fetch data");
       }
     } catch (err) {
       console.error("[DataView] Fetch error:", err);
