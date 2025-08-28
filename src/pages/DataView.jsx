@@ -439,6 +439,12 @@ function DataView() {
 
   // Fetch data like MapView
   const fetchData = async (page = 1, elementType = "all") => {
+    // Check if layerName is available
+    if (!layerName) {
+      toast.error("Layer name is not available");
+      return;
+    }
+    
     setLoading(true);
     try {
       // Convert layer name to match API endpoint format (snake_case to kebab-case)
@@ -521,6 +527,8 @@ function DataView() {
         toast.error(`Data not found for layer: ${layerName}`);
       } else if (err.response?.status === 400) {
         toast.error("Invalid request. Please check your parameters.");
+      } else if (err.code === "ERR_NETWORK") {
+        toast.error("Network error. Please check your connection.");
       } else {
         toast.error(err.response?.data?.error || "Failed to fetch data");
       }
@@ -530,8 +538,11 @@ function DataView() {
   };
 
   useEffect(() => {
-    if (layerName && token) fetchData(1, selectedElement);
-    else if (!token) toast.error("Please log in to view data");
+    if (layerName && token) {
+      fetchData(1, selectedElement);
+    } else if (!token) {
+      toast.error("Please log in to view data");
+    }
   }, [layerName, limit, token, selectedElement]);
 
   const handleElementChange = (elementType) => {
@@ -651,6 +662,11 @@ function DataView() {
   };
 
   const getDataToDisplay = () => selectedElement === "all" ? groupedData : { [selectedElement]: groupedData[selectedElement] || [] };
+
+  // Show loading if layerName is not yet available
+  if (!layerName) {
+    return <div style={{ textAlign: "center", padding: 40 }}>Loading layer information...</div>;
+  }
 
   return (
     <div style={{ maxWidth: "95%", margin: "40px auto", padding: 20 }}>
