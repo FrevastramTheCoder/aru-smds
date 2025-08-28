@@ -436,6 +436,7 @@ function DataView() {
   const [limit, setLimit] = useState(50);
   const [activeTab, setActiveTab] = useState("all");
   const [selectedElement, setSelectedElement] = useState("all");
+  const [apiError, setApiError] = useState(null);
 
   // Fetch data like MapView
   const fetchData = async (page = 1, elementType = "all") => {
@@ -446,23 +447,52 @@ function DataView() {
     }
     
     setLoading(true);
+    setApiError(null);
     try {
-      // Convert layer name to match API endpoint format (snake_case to kebab-case)
-      const formattedLayerName = layerName.replace(/_/g, '-');
-      
-      let url = `${API_BASE}/data/${formattedLayerName}?page=${page}&limit=${limit}`;
-      if (elementType !== "all") {
-        // Convert element type to match API format
-        const formattedElementType = elementType.replace(/_/g, '-');
-        url += `&elementType=${formattedElementType}`;
+      // Try different API endpoint formats
+      const apiFormats = [
+        `${API_BASE}/data/${layerName}`, // Original format
+        `${API_BASE}/data/${layerName.replace(/_/g, '-')}`, // kebab-case format
+        `${API_BASE}/${layerName}`, // Direct endpoint
+        `${API_BASE}/${layerName.replace(/_/g, '-')}`, // Direct endpoint with kebab-case
+      ];
+
+      let url;
+      let res;
+      let lastError;
+
+      // Try each API format until one works
+      for (const format of apiFormats) {
+        try {
+          url = `${format}?page=${page}&limit=${limit}`;
+          if (elementType !== "all") {
+            url += `&elementType=${elementType}`;
+          }
+
+          console.log("Trying API endpoint:", url);
+          res = await axios.get(url, { 
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000 // 10 second timeout
+          });
+
+          // If we get a successful response, break out of the loop
+          if (res.data) {
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+          console.log(`API endpoint ${url} failed:`, err.message);
+          // Continue to next format
+        }
       }
 
-      const res = await axios.get(url, { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        } 
-      });
+      // If all formats failed, throw the last error
+      if (!res) {
+        throw lastError || new Error("All API endpoint formats failed");
+      }
 
       if (res.data?.success) {
         const rows = res.data.data.map((r) => {
@@ -471,7 +501,7 @@ function DataView() {
           const elementType = r.elementType || layerName || "unknown";
           const style = getLayerStyle(elementType);
           return {
-            id: r.id,
+            id: r.id || r._id || Math.random().toString(36).substr(2, 9), // Fallback ID
             attributes,
             geometry,
             elementType,
@@ -519,18 +549,51 @@ function DataView() {
 
         if (res.data.layerInfo) setLayerInfo(res.data.layerInfo);
       } else {
-        toast.error(res.data?.error || "Failed to fetch data");
+        // Handle case where data is directly in response (without success wrapper)
+        if (Array.isArray(res.data)) {
+          const rows = res.data.map((r) => {
+            const attributes = r.attributes || {};
+            const geometry = r.geometry || {};
+            const elementType = r.elementType || layerName || "unknown";
+            const style = getLayerStyle(elementType);
+            return {
+              id: r.id || r._id || Math.random().toString(36).substr(2, 9),
+              attributes,
+              geometry,
+              elementType,
+              color: style.color,
+              pointRadius: geometry.type === "Point" ? getPointRadius(elementType) : null,
+            };
+          });
+
+          setData(rows);
+
+          // Group by elementType
+          const grouped = {};
+          rows.forEach((row) => {
+            const type = row.elementType;
+            if (!grouped[type]) grouped[type] = [];
+            grouped[type].push(row);
+          });
+          setGroupedData(grouped);
+        } else {
+          toast.error(res.data?.error || "Failed to fetch data");
+        }
       }
     } catch (err) {
       console.error("[DataView] Fetch error:", err);
+      setApiError(err.message);
+      
       if (err.response?.status === 404) {
         toast.error(`Data not found for layer: ${layerName}`);
       } else if (err.response?.status === 400) {
         toast.error("Invalid request. Please check your parameters.");
-      } else if (err.code === "ERR_NETWORK") {
-        toast.error("Network error. Please check your connection.");
+      } else if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        toast.error("Network error. Please check your connection and API URL.");
+      } else if (err.code === "ECONNABORTED") {
+        toast.error("Request timeout. The server is taking too long to respond.");
       } else {
-        toast.error(err.response?.data?.error || "Failed to fetch data");
+        toast.error(err.response?.data?.error || err.message || "Failed to fetch data");
       }
     } finally {
       setLoading(false);
@@ -675,6 +738,21 @@ function DataView() {
         Data View - {dataTypes.find((dt) => dt.key === layerName)?.label || layerName}
       </h1>
 
+      {/* Debug info */}
+      {apiError && (
+        <div style={{ backgroundColor: "#fee2e2", color: "#b91c1c", padding: "10px", borderRadius: "8px", marginBottom: "20px" }}>
+          <strong>API Error:</strong> {apiError}
+          <div style={{ marginTop: "10px" }}>
+            <button 
+              onClick={() => fetchData(1, selectedElement)}
+              style={{ backgroundColor: "#ef4444", color: "white", padding: "5px 10px", borderRadius: "4px", border: "none" }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Controls, Search, Export */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
         <input
@@ -736,6 +814,12 @@ function DataView() {
           )
         )
       }
+
+      {!loading && Object.keys(getDataToDisplay()).length === 0 && (
+        <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+          No data available for this layer. Please check if the API endpoint is correct.
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
