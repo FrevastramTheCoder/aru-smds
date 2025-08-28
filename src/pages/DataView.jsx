@@ -619,15 +619,16 @@
 // export default DataView;
 
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams, useLocation, useNavigate } from "react-router-dom"; // Added useNavigate
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
-import debounce from "lodash/debounce"; // Added lodash for debouncing
+import debounce from "lodash/debounce";
+import { Navigate } from "react-router-dom"; // Added for conditional rendering
 
-// Predefined data types (aligned with DataManagement)
+// Predefined data types (unchanged)
 const dataTypes = [
   { key: "buildings", label: "Buildings" },
   { key: "roads", label: "Roads" },
@@ -644,7 +645,7 @@ const dataTypes = [
   { key: "aru_boundary", label: "Aru Boundary" },
 ];
 
-// Layer styles (aligned with DataManagement)
+// Layer styles (unchanged)
 const getLayerStyle = (type) => {
   const styles = {
     aru_boundary: { color: "red", dashArray: "5,5,1,5", weight: 3, fillOpacity: 0.1 },
@@ -664,7 +665,7 @@ const getLayerStyle = (type) => {
   return styles[type] || { color: "gray", weight: 2, fillOpacity: 0.2 };
 };
 
-// Point radius for specific layers (aligned with DataManagement)
+// Point radius for specific layers (unchanged)
 const getPointRadius = (type) => {
   switch (type) {
     case "solid_waste":
@@ -693,30 +694,35 @@ function DataView() {
 
   const { layerName } = useParams();
   const location = useLocation();
-  const navigate = useNavigate(); // Added for redirection
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
+
+  // Validate layerName immediately
+  const isValidLayer = layerName && dataTypes.some((dt) => dt.key === layerName);
 
   // Log route params and location for debugging
   useEffect(() => {
     console.log("[DataView] Current route params:", { layerName });
     console.log("[DataView] Current location:", location);
-    if (!layerName || !dataTypes.some((dt) => dt.key === layerName)) {
+    if (!isValidLayer) {
       console.error("[DataView] Invalid or missing layerName:", layerName);
-      toast.error("Invalid layer name. Redirecting to home.");
-      navigate("/"); // Redirect to a safe route
+      toast.error("Invalid layer name. Please select a valid layer.");
     }
-  }, [layerName, location, navigate]);
+  }, [layerName, location]);
+
+  // Redirect if no token or invalid layerName
+  if (!token) {
+    toast.error("Please log in to view data");
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isValidLayer) {
+    return <Navigate to="/" replace />;
+  }
 
   const fetchData = async (page = 1, elementType = "all") => {
-    if (!layerName) {
-      console.error("[DataView] Layer name is undefined");
-      toast.error("Invalid layer name. Please check the URL or route configuration.");
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
       let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
@@ -798,32 +804,19 @@ function DataView() {
     }
   };
 
-  // Debounced version of handleElementChange to prevent rapid calls
+  // Debounced handleElementChange
   const debouncedHandleElementChange = useCallback(
     debounce((elementType) => {
       setSelectedElement(elementType);
       setActiveTab(elementType);
-      if (layerName && dataTypes.some((dt) => dt.key === layerName)) {
-        fetchData(1, elementType);
-      } else {
-        console.error("[DataView] Cannot fetch data due to invalid layerName:", layerName);
-        toast.error("Invalid layer name. Please select a valid layer.");
-      }
-    }, 300), // 300ms debounce delay
+      fetchData(1, elementType);
+    }, 300),
     [layerName]
   );
 
   useEffect(() => {
-    if (!token) {
-      toast.error("Please log in to view data");
-      return;
-    }
-    if (!layerName || !dataTypes.some((dt) => dt.key === layerName)) {
-      toast.error("Layer name is missing or invalid. Please check the URL.");
-      return;
-    }
     fetchData(1, selectedElement);
-  }, [layerName, limit, token, selectedElement]);
+  }, [layerName, limit, selectedElement]);
 
   const executeQuery = () => {
     setLoading(true);
@@ -938,7 +931,7 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName || "data"}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
+    a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -951,7 +944,7 @@ function DataView() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${layerName || "data"}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
+    a.download = `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.json`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -968,11 +961,11 @@ function DataView() {
     });
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, layerName || "Data");
-    XLSX.writeFile(workbook, `${layerName || "data"}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, layerName);
+    XLSX.writeFile(workbook, `${layerName}_${selectedElement !== "all" ? selectedElement + "_" : ""}export.xlsx`);
   };
 
-  // Inline CSS
+  // Inline CSS (unchanged)
   const containerStyle = { maxWidth: "95%", margin: "40px auto", padding: 20, fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" };
   const titleStyle = { fontSize: 32, fontWeight: "bold", marginBottom: 20, textAlign: "center", color: "#1f2937" };
   const controlsStyle = { display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 20, alignItems: "center" };
@@ -1070,10 +1063,10 @@ function DataView() {
     }
   };
 
-  return (
+ takdir: return (
     <div style={containerStyle}>
       <ToastContainer />
-      <h1 style={titleStyle}>Data View - {dataTypes.find((dt) => dt.key === layerName)?.label || layerName || "Unknown Layer"}</h1>
+      <h1 style={titleStyle}>Data View - {dataTypes.find((dt) => dt.key === layerName)?.label || layerName}</h1>
 
       {/* Legend */}
       {Object.keys(groupedData).length > 0 && (
