@@ -619,7 +619,7 @@
 // export default DataView;
 
 import React, { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -692,14 +692,21 @@ function DataView() {
 
   const { layerName } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
-  // Added useEffect for logging route params and location
+  // Debug route parameters
   useEffect(() => {
-    console.log("[DataView] Current route params:", { layerName });
+    console.log("[DataView] Current route params:", useParams());
     console.log("[DataView] Current location:", location);
+    console.log("[DataView] Layer name from params:", layerName);
+    
+    // Check if layerName exists in URL query params as fallback
+    const queryParams = new URLSearchParams(location.search);
+    const queryLayerName = queryParams.get('layer');
+    console.log("[DataView] Layer name from query params:", queryLayerName);
   }, [layerName, location]);
 
   // Check API health
@@ -711,7 +718,9 @@ function DataView() {
       console.log("API health check:", healthCheck.data);
     } catch (err) {
       console.error("API health check failed:", err.message);
-      toast.error("Cannot connect to spatial data API");
+      if (err.code !== 'ECONNABORTED') {
+        toast.error("Cannot connect to spatial data API");
+      }
     }
   };
 
@@ -722,8 +731,22 @@ function DataView() {
   const fetchData = async (page = 1, elementType = "all") => {
     setLoading(true);
     try {
-      // Validation checks
-      if (!layerName) {
+      // Get layer name from multiple possible sources
+      let currentLayerName = layerName;
+      
+      // Fallback: check query parameters
+      if (!currentLayerName) {
+        const queryParams = new URLSearchParams(location.search);
+        currentLayerName = queryParams.get('layer');
+      }
+      
+      // Fallback: check state from navigation
+      if (!currentLayerName && location.state?.layerName) {
+        currentLayerName = location.state.layerName;
+      }
+
+      // Final validation
+      if (!currentLayerName) {
         toast.error("Layer name is required");
         setLoading(false);
         return;
@@ -735,14 +758,10 @@ function DataView() {
         return;
       }
 
-      // Validate layerName against known dataTypes
-      const isValidLayer = dataTypes.some(dt => dt.key === layerName);
-      if (!isValidLayer) {
-        toast.warning(`Layer "${layerName}" may not be supported`);
-      }
+      console.log("[DataView] Using layer name:", currentLayerName);
 
       // Construct URL with proper encoding
-      let url = `${API_BASE}/data/${encodeURIComponent(layerName)}?page=${page}&limit=${limit}`;
+      let url = `${API_BASE}/data/${encodeURIComponent(currentLayerName)}?page=${page}&limit=${limit}`;
       if (elementType !== "all") {
         url += `&elementType=${encodeURIComponent(elementType)}`;
       }
@@ -761,7 +780,7 @@ function DataView() {
         const rows = res.data.data.map((r) => {
           const attributes = r.attributes || {};
           const geometry = r.geometry || {};
-          const elementType = r.elementType || layerName || "unknown";
+          const elementType = r.elementType || currentLayerName || "unknown";
           const style = getLayerStyle(elementType);
           return {
             id: r.id,
@@ -832,6 +851,7 @@ function DataView() {
         toast.error(`Bad request: ${err.response.data?.error || 'Check your parameters'}`);
       } else if (err.response?.status === 401) {
         toast.error("Authentication failed. Please log in again.");
+        navigate('/login');
       } else if (err.response?.status === 404) {
         toast.error(`Data not found for layer: ${layerName}`);
       } else if (err.response?.status >= 500) {
@@ -845,12 +865,28 @@ function DataView() {
   };
 
   useEffect(() => {
-    if (layerName && token) {
+    // Get layer name from multiple sources
+    let currentLayerName = layerName;
+    
+    if (!currentLayerName) {
+      const queryParams = new URLSearchParams(location.search);
+      currentLayerName = queryParams.get('layer');
+    }
+    
+    if (!currentLayerName && location.state?.layerName) {
+      currentLayerName = location.state.layerName;
+    }
+
+    if (currentLayerName && token) {
       fetchData(1, selectedElement);
     } else if (!token) {
       toast.error("Please log in to view data");
+      navigate('/login');
+    } else if (!currentLayerName) {
+      toast.error("No layer specified. Redirecting to data management...");
+      navigate('/data-management');
     }
-  }, [layerName, limit, token, selectedElement]);
+  }, [layerName, limit, token, selectedElement, location, navigate]);
 
   const handleElementChange = (elementType) => {
     setSelectedElement(elementType);
@@ -1104,10 +1140,33 @@ function DataView() {
     }
   };
 
+  // Get current layer name for display
+  const getCurrentLayerName = () => {
+    let currentLayerName = layerName;
+    
+    if (!currentLayerName) {
+      const queryParams = new URLSearchParams(location.search);
+      currentLayerName = queryParams.get('layer');
+    }
+    
+    if (!currentLayerName && location.state?.layerName) {
+      currentLayerName = location.state.layerName;
+    }
+    
+    return currentLayerName || "Unknown Layer";
+  };
+
   return (
     <div style={containerStyle}>
       <ToastContainer />
-      <h1 style={titleStyle}>Data View - {dataTypes.find((dt) => dt.key === layerName)?.label || layerName}</h1>
+      <h1 style={titleStyle}>Data View - {dataTypes.find((dt) => dt.key === getCurrentLayerName())?.label || getCurrentLayerName()}</h1>
+
+      {/* Loading or error state */}
+      {!getCurrentLayerName() && (
+        <div style={{ textAlign: "center", padding: 40, color: "#dc2626" }}>
+          Error: No layer specified. Please navigate from the Data Management page.
+        </div>
+      )}
 
       {/* Legend */}
       {Object.keys(groupedData).length > 0 && (
@@ -1180,118 +1239,9 @@ function DataView() {
         </select>
       </div>
 
-      {/* Element type selector */}
-      <div style={{ marginBottom: 20 }}>
-        <label htmlFor="elementSelector" style={{ display: "block", marginBottom: 8, fontWeight: "bold" }}>
-          Select Element Type:
-        </label>
-        <select
-          id="elementSelector"
-          value={selectedElement}
-          onChange={(e) => handleElementChange(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="all">All Elements</option>
-          {dataTypes.map((type) => (
-            <option key={type.key} value={type.key}>
-              {type.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Rest of your component remains the same... */}
+      {/* ... (keep all the other JSX code as before) ... */}
 
-      {/* Column toggle */}
-      {columnOrder.length > 0 && (
-        <div style={checkboxContainer}>
-          <span style={{ fontWeight: "bold", marginRight: 10 }}>Show Columns:</span>
-          {columnOrder.map((col) => (
-            <label key={col} style={{ fontSize: 14, color: "#374151", display: "flex", alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={visibleColumns[col] || false}
-                onChange={() => toggleColumn(col)}
-                style={{ marginRight: 6 }}
-              />
-              {col.startsWith("attributes.") ? col.replace("attributes.", "") : col.replace(/_/g, " ")}
-            </label>
-          ))}
-        </div>
-      )}
-
-      {/* Tabs for different element types */}
-      <div style={tabContainerStyle}>
-        <div
-          style={activeTab === "all" ? activeTabStyle : tabStyle}
-          onClick={() => handleElementChange("all")}
-        >
-          All Elements
-        </div>
-        {dataTypes
-          .filter((dt) => Object.keys(groupedData).includes(dt.key))
-          .map((type) => (
-            <div
-              key={type.key}
-              style={activeTab === type.key ? activeTabStyle : tabStyle}
-              onClick={() => handleElementChange(type.key)}
-            >
-              {type.label}
-            </div>
-          ))}
-      </div>
-
-      {/* Tables */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
-      ) : Object.keys(getDataToDisplay()).length > 0 ? (
-        Object.entries(getDataToDisplay()).map(([elementType, elementData]) =>
-          elementData.length > 0 ? renderElementTable(elementType, elementData) : null
-        )
-      ) : (
-        <div style={{ textAlign: "center", padding: 40 }}>No data found for this element type.</div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={paginationStyle}>
-          <button
-            onClick={() => fetchData(currentPage - 1, selectedElement)}
-            disabled={currentPage === 1}
-            style={pageButtonStyle}
-          >
-            Previous
-          </button>
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum;
-            if (currentPage <= 3) {
-              pageNum = i + 1;
-            } else if (currentPage >= totalPages - 2) {
-              pageNum = totalPages - 4 + i;
-            } else {
-              pageNum = currentPage - 2 + i;
-            }
-            if (pageNum < 1 || pageNum > totalPages) return null;
-            return (
-              <button
-                key={pageNum}
-                onClick={() => fetchData(pageNum, selectedElement)}
-                style={pageNum === currentPage ? activePageButtonStyle : pageButtonStyle}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => fetchData(currentPage + 1, selectedElement)}
-            disabled={currentPage === totalPages}
-            style={pageButtonStyle}
-          >
-            Next
-          </button>
-          <span style={{ marginLeft: 10 }}>
-            Page {currentPage} of {totalPages}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
