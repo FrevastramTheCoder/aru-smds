@@ -1490,7 +1490,7 @@
 // export default DataView;
 
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -1550,11 +1550,19 @@ function DataView() {
   const [selectedElement, setSelectedElement] = useState("all");
 
   const { layerName } = useParams();
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
 
   const fetchData = async (page = 1, elementType = "all") => {
+    // Check if layerName is defined
+    if (!layerName) {
+      console.error("Layer name is undefined");
+      toast.error("No layer specified");
+      return;
+    }
+
     setLoading(true);
     try {
       // Build the API URL with optional element type filter
@@ -1636,6 +1644,10 @@ function DataView() {
       console.error("Error fetching data:", err);
       if (err.response?.data?.error) {
         toast.error(err.response.data.error);
+        if (err.response.status === 404) {
+          // Redirect to data management if layer doesn't exist
+          setTimeout(() => navigate("/data-management"), 2000);
+        }
       } else {
         toast.error("Failed to fetch data");
       }
@@ -1647,8 +1659,11 @@ function DataView() {
   useEffect(() => {
     if (layerName && token) {
       fetchData(1, selectedElement);
+    } else if (!token) {
+      toast.error("Authentication required");
+      navigate("/login");
     }
-  }, [layerName, limit, token, selectedElement]);
+  }, [layerName, limit, token, selectedElement, navigate]);
 
   const handleElementChange = (elementType) => {
     setSelectedElement(elementType);
@@ -1892,6 +1907,19 @@ function DataView() {
       return { [selectedElement]: groupedData[selectedElement] || [] };
     }
   };
+
+  // Check if layerName is undefined
+  if (!layerName) {
+    return (
+      <div style={containerStyle}>
+        <ToastContainer />
+        <h1 style={titleStyle}>Data View</h1>
+        <div style={{ textAlign: "center", padding: 40, color: "#ef4444" }}>
+          No layer specified. Please navigate to this page with a valid layer name.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={containerStyle}>
