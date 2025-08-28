@@ -1,3 +1,4 @@
+
 // import React, { useEffect, useState } from "react";
 // import { useParams, useLocation } from "react-router-dom";
 // import axios from "axios";
@@ -75,22 +76,50 @@
 //   const [limit, setLimit] = useState(50);
 //   const [activeTab, setActiveTab] = useState("all");
 //   const [selectedElement, setSelectedElement] = useState("all");
+//   const [apiError, setApiError] = useState(null);
 
-//   // Fetch data like MapView
+//   // Fetch data from the backend
 //   const fetchData = async (page = 1, elementType = "all") => {
+//     // Check if layerName is available
+//     if (!layerName) {
+//       toast.error("Layer name is not available");
+//       return;
+//     }
+    
 //     setLoading(true);
+//     setApiError(null);
 //     try {
+//       // Use the correct API endpoint format based on your backend
 //       let url = `${API_BASE}/data/${layerName}?page=${page}&limit=${limit}`;
-//       if (elementType !== "all") url += `&elementType=${elementType}`;
+      
+//       // Add elementType filter if specified
+//       if (elementType !== "all") {
+//         url += `&elementType=${elementType}`;
+//       }
 
-//       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+//       console.log("Fetching data from:", url);
+
+//       const res = await axios.get(url, { 
+//         headers: { 
+//           Authorization: `Bearer ${token}`,
+//           'Content-Type': 'application/json'
+//         },
+//         timeout: 15000
+//       });
+
+//       console.log("API Response:", res.data);
 
 //       if (res.data?.success) {
+//         // Transform the data to match our frontend structure
 //         const rows = res.data.data.map((r) => {
 //           const attributes = r.attributes || {};
 //           const geometry = r.geometry || {};
-//           const elementType = r.elementType || layerName || "unknown";
+          
+//           // Extract elementType from attributes or use layerName as fallback
+//           const elementType = attributes.type || attributes.feature_type || layerName || "unknown";
+          
 //           const style = getLayerStyle(elementType);
+          
 //           return {
 //             id: r.id,
 //             attributes,
@@ -144,15 +173,30 @@
 //       }
 //     } catch (err) {
 //       console.error("[DataView] Fetch error:", err);
-//       toast.error(err.response?.data?.error || "Failed to fetch data");
+//       setApiError(err.message);
+      
+//       if (err.response?.status === 404) {
+//         toast.error(`Data not found for layer: ${layerName}`);
+//       } else if (err.response?.status === 400) {
+//         toast.error("Invalid request. Please check your parameters.");
+//       } else if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+//         toast.error("Network error. Please check your connection and API URL.");
+//       } else if (err.code === "ECONNABORTED") {
+//         toast.error("Request timeout. The server is taking too long to respond.");
+//       } else {
+//         toast.error(err.response?.data?.error || err.message || "Failed to fetch data");
+//       }
 //     } finally {
 //       setLoading(false);
 //     }
 //   };
 
 //   useEffect(() => {
-//     if (layerName && token) fetchData(1, selectedElement);
-//     else if (!token) toast.error("Please log in to view data");
+//     if (layerName && token) {
+//       fetchData(1, selectedElement);
+//     } else if (!token) {
+//       toast.error("Please log in to view data");
+//     }
 //   }, [layerName, limit, token, selectedElement]);
 
 //   const handleElementChange = (elementType) => {
@@ -273,12 +317,32 @@
 
 //   const getDataToDisplay = () => selectedElement === "all" ? groupedData : { [selectedElement]: groupedData[selectedElement] || [] };
 
+//   // Show loading if layerName is not yet available
+//   if (!layerName) {
+//     return <div style={{ textAlign: "center", padding: 40 }}>Loading layer information...</div>;
+//   }
+
 //   return (
 //     <div style={{ maxWidth: "95%", margin: "40px auto", padding: 20 }}>
 //       <ToastContainer />
 //       <h1 style={{ fontSize: 32, fontWeight: "bold", marginBottom: 20 }}>
 //         Data View - {dataTypes.find((dt) => dt.key === layerName)?.label || layerName}
 //       </h1>
+
+//       {/* Debug info */}
+//       {apiError && (
+//         <div style={{ backgroundColor: "#fee2e2", color: "#b91c1c", padding: "10px", borderRadius: "8px", marginBottom: "20px" }}>
+//           <strong>API Error:</strong> {apiError}
+//           <div style={{ marginTop: "10px" }}>
+//             <button 
+//               onClick={() => fetchData(1, selectedElement)}
+//               style={{ backgroundColor: "#ef4444", color: "white", padding: "5px 10px", borderRadius: "4px", border: "none" }}
+//             >
+//               Retry
+//             </button>
+//           </div>
+//         </div>
+//       )}
 
 //       {/* Controls, Search, Export */}
 //       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
@@ -342,6 +406,12 @@
 //         )
 //       }
 
+//       {!loading && Object.keys(getDataToDisplay()).length === 0 && (
+//         <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+//           No data available for this layer. Please check if the API endpoint is correct.
+//         </div>
+//       )}
+
 //       {/* Pagination */}
 //       {totalPages > 1 && (
 //         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 20 }}>
@@ -359,8 +429,9 @@
 // }
 
 // export default DataView;
+
 import React, { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -419,6 +490,7 @@ const getPointRadius = (type) => {
 function DataView() {
   const { layerName } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   const API_BASE = import.meta.env.VITE_API_SPATIAL_URL || "http://localhost:5000/api/spatial";
@@ -426,7 +498,7 @@ function DataView() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState({});
   const [visibleColumns, setVisibleColumns] = useState({});
   const [columnOrder, setColumnOrder] = useState([]);
@@ -437,12 +509,15 @@ function DataView() {
   const [activeTab, setActiveTab] = useState("all");
   const [selectedElement, setSelectedElement] = useState("all");
   const [apiError, setApiError] = useState(null);
+  const [layerLoading, setLayerLoading] = useState(true);
 
   // Fetch data from the backend
   const fetchData = async (page = 1, elementType = "all") => {
     // Check if layerName is available
     if (!layerName) {
       toast.error("Layer name is not available");
+      setLoading(false);
+      setLayerLoading(false);
       return;
     }
     
@@ -548,14 +623,24 @@ function DataView() {
       }
     } finally {
       setLoading(false);
+      setLayerLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log("Layer name from URL:", layerName);
+    console.log("Token:", token ? "Available" : "Missing");
+    
     if (layerName && token) {
+      setLayerLoading(true);
       fetchData(1, selectedElement);
     } else if (!token) {
       toast.error("Please log in to view data");
+      setLayerLoading(false);
+      setLoading(false);
+    } else {
+      setLayerLoading(false);
+      setLoading(false);
     }
   }, [layerName, limit, token, selectedElement]);
 
@@ -678,8 +763,23 @@ function DataView() {
   const getDataToDisplay = () => selectedElement === "all" ? groupedData : { [selectedElement]: groupedData[selectedElement] || [] };
 
   // Show loading if layerName is not yet available
-  if (!layerName) {
+  if (layerLoading) {
     return <div style={{ textAlign: "center", padding: 40 }}>Loading layer information...</div>;
+  }
+
+  if (!layerName) {
+    return (
+      <div style={{ textAlign: "center", padding: 40 }}>
+        <h2>No layer selected</h2>
+        <p>Please select a layer from the menu or check your URL.</p>
+        <button 
+          onClick={() => navigate('/')}
+          style={{ backgroundColor: "#3b82f6", color: "white", padding: "10px 20px", borderRadius: "8px", border: "none" }}
+        >
+          Go to Home
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -735,7 +835,7 @@ function DataView() {
       </div>
 
       {/* Tables */}
-      {loading ? <div style={{ textAlign: "center", padding: 40 }}>Loading...</div> :
+      {loading ? <div style={{ textAlign: "center", padding: 40 }}>Loading data...</div> :
         Object.entries(getDataToDisplay()).map(([elementType, elementData]) =>
           elementData.length > 0 && (
             <div key={elementType} style={{ overflowX: "auto", marginBottom: 20 }}>
@@ -769,6 +869,14 @@ function DataView() {
       {!loading && Object.keys(getDataToDisplay()).length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
           No data available for this layer. Please check if the API endpoint is correct.
+          <div style={{ marginTop: "10px" }}>
+            <button 
+              onClick={() => fetchData(1, selectedElement)}
+              style={{ backgroundColor: "#3b82f6", color: "white", padding: "5px 10px", borderRadius: "4px", border: "none" }}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
