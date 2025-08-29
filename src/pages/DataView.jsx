@@ -1507,7 +1507,7 @@
 
 // export default DataView;
 // src/pages/DataView.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
@@ -1542,27 +1542,36 @@ const DataView = ({ layer: initialLayer }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(20);
   const [elementType, setElementType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async () => {
     if (!layer) return;
     setLoading(true);
 
     try {
-      const res = await axios.get(`https://your-backend.com/spatial/data/${layer}`, {
+      const res = await axios.get(`${import.meta.env.VITE_API_SPATIAL_URL}/geojson/${layer}`, {
         headers: { Authorization: `Bearer ${token}` },
         params: { page, limit, elementType }
       });
 
-      if (res.data.success) {
-        setData(res.data.data);
-        setColumns(res.data.layerInfo.columns.map(c => c.column_name));
-        setTotalPages(res.data.pagination.totalPages);
-      } else {
-        setData([]);
-      }
+      const features = res.data.features || [];
+
+      // Set unique columns based on properties keys
+      const allKeys = new Set();
+      features.forEach(f => {
+        if (f.properties) {
+          Object.keys(f.properties).forEach(k => allKeys.add(k));
+        }
+      });
+
+      setColumns(Array.from(allKeys));
+      setData(features);
+      setTotalPages(Math.ceil((res.data.total || features.length) / limit));
     } catch (err) {
       console.error('[DataView] Fetch Error:', err);
       setData([]);
+      setColumns([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -1572,14 +1581,24 @@ const DataView = ({ layer: initialLayer }) => {
     fetchData();
   }, [layer, page, elementType]);
 
+  const filteredData = useMemo(() => {
+    if (!searchQuery) return data;
+    return data.filter(f => 
+      f.properties && 
+      Object.values(f.properties).some(val => 
+        val && val.toString().toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    );
+  }, [data, searchQuery]);
+
   const handlePrev = () => setPage(p => Math.max(1, p - 1));
   const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
 
   return (
-    <div>
+    <div style={{ padding: '16px' }}>
       <h2>Tabular Data for {layer || 'No layer selected'}</h2>
 
-      {/* Layer selector */}
+      {/* Layer Selector */}
       <div style={{ margin: '10px 0' }}>
         <label>Select Layer: </label>
         <select value={layer} onChange={e => { setLayer(e.target.value); setPage(1); }}>
@@ -1590,7 +1609,7 @@ const DataView = ({ layer: initialLayer }) => {
         </select>
       </div>
 
-      {/* Type filter */}
+      {/* Type Filter */}
       {layer && (
         <div style={{ margin: '10px 0' }}>
           <label>Filter by type: </label>
@@ -1602,50 +1621,49 @@ const DataView = ({ layer: initialLayer }) => {
         </div>
       )}
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : !layer ? (
-        <p>Please select a layer to view data.</p>
-      ) : data.length === 0 ? (
-        <p>No data available</p>
-      ) : (
-        <table border="1" cellPadding="5" cellSpacing="0">
-          <thead>
-            <tr>
-              <th>ID</th>
-              {columns.map(col => col !== 'geom' && col !== 'id' && <th key={col}>{col}</th>)}
-              <th>Geometry</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map(row => (
-              <tr key={row.id}>
-                <td>{row.id}</td>
-                {columns.map(col =>
-                  col !== 'geom' && col !== 'id' ? (
-                    <td key={col}>{row.attributes[col] ?? '-'}</td>
-                  ) : null
-                )}
-                <td>{row.geometry ? JSON.stringify(row.geometry) : '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {/* Search */}
+      <div style={{ margin: '10px 0' }}>
+        <input 
+          type="text" 
+          placeholder="Search attributes..." 
+          value={searchQuery} 
+          onChange={e => setSearchQuery(e.target.value)} 
+          style={{ padding: '6px', width: '300px' }}
+        />
+      </div>
 
-      {/* Pagination */}
-      {layer && data.length > 0 && (
-        <div style={{ marginTop: '10px' }}>
-          <button onClick={handlePrev} disabled={page === 1}>
-            Prev
-          </button>
-          <span style={{ margin: '0 10px' }}>
-            Page {page} of {totalPages}
-          </span>
-          <button onClick={handleNext} disabled={page === totalPages}>
-            Next
-          </button>
-        </div>
+      {loading ? (
+        <p>Loading data...</p>
+      ) : (
+        <>
+          <table border="1" cellPadding="5" cellSpacing="0" style={{ width: '100%', marginTop: '10px', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th>#</th>
+                {columns.map(col => <th key={col}>{col.toUpperCase()}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.length === 0 ? (
+                <tr><td colSpan={columns.length + 1} style={{ textAlign: 'center' }}>No data found</td></tr>
+              ) : filteredData.map((feature, idx) => (
+                <tr key={idx}>
+                  <td>{(page - 1) * limit + idx + 1}</td>
+                  {columns.map(col => (
+                    <td key={col}>{feature.properties ? feature.properties[col] ?? '-' : '-'}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          <div style={{ marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={handlePrev} disabled={page <= 1}>Prev</button>
+            <span>Page {page} of {totalPages}</span>
+            <button onClick={handleNext} disabled={page >= totalPages}>Next</button>
+          </div>
+        </>
       )}
     </div>
   );
