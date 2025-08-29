@@ -1506,79 +1506,117 @@
 // }
 
 // export default DataView;
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { useParams } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+// src/pages/DataView.jsx
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
-const DataView = () => {
-  const { table } = useParams(); // 🔹 dynamic layer e.g. buildings, roads
-  const { user } = useAuth(); // 🔹 must contain JWT token
-  const [rows, setRows] = useState([]);
+const DataView = ({ layer }) => {
+  const { token } = useAuth(); // Assuming your AuthContext provides JWT token
+  const [data, setData] = useState([]);
   const [columns, setColumns] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit] = useState(20);
+  const [elementType, setElementType] = useState('all');
+
+  const fetchData = async () => {
+    if (!layer) return;
+    setLoading(true);
+
+    try {
+      const res = await axios.get(`https://your-backend.com/spatial/data/${layer}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page, limit, elementType }
+      });
+
+      if (res.data.success) {
+        setData(res.data.data);
+        setColumns(res.data.layerInfo.columns.map(c => c.column_name));
+        setTotalPages(res.data.pagination.totalPages);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error('[DataView] Fetch Error:', err);
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await axios.get(
-          `${import.meta.env.VITE_BACKEND_URL}/spatial/data/${table}`,
-          {
-            headers: { Authorization: `Bearer ${user.token}` },
-          }
-        );
+    fetchData();
+  }, [layer, page, elementType]);
 
-        if (res.data && res.data.data) {
-          const records = res.data.data.map((d) => ({
-            id: d.id,
-            ...d.attributes, // attributes stored in JSONB column
-          }));
-
-          setRows(records);
-          if (records.length > 0) setColumns(Object.keys(records[0]));
-        }
-      } catch (err) {
-        console.error("Error fetching tabular data:", err);
-      }
-    };
-
-    if (user && table) {
-      fetchData();
-    }
-  }, [table, user]);
+  const handlePrev = () => setPage(p => Math.max(1, p - 1));
+  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
 
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-semibold mb-4">
-        Tabular Data for {table}
-      </h2>
-      {rows.length === 0 ? (
+    <div>
+      <h2>Tabular Data for {layer || 'No layer selected'}</h2>
+
+      <div style={{ margin: '10px 0' }}>
+        <label>Filter by type: </label>
+        <select value={elementType} onChange={e => setElementType(e.target.value)}>
+          <option value="all">All</option>
+          <option value="building">Building</option>
+          <option value="road">Road</option>
+          <option value="footpath">Footpath</option>
+          <option value="vegetation">Vegetation</option>
+          <option value="parking">Parking</option>
+          <option value="solid_waste">Solid Waste</option>
+          <option value="electricity">Electricity</option>
+          <option value="water_supply">Water Supply</option>
+          <option value="drainage">Drainage</option>
+          <option value="security">Security</option>
+          <option value="recreational_areas">Recreational</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <p>Loading...</p>
+      ) : data.length === 0 ? (
         <p>No data available</p>
       ) : (
-        <div className="overflow-x-auto border rounded-lg shadow-md">
-          <table className="min-w-full border-collapse">
-            <thead className="bg-gray-200">
-              <tr>
-                {columns.map((col, idx) => (
-                  <th key={idx} className="border px-4 py-2 text-left">
-                    {col}
-                  </th>
-                ))}
+        <table border="1" cellPadding="5" cellSpacing="0">
+          <thead>
+            <tr>
+              <th>ID</th>
+              {columns.map(col => col !== 'geom' && col !== 'id' && <th key={col}>{col}</th>)}
+              <th>Geometry</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map(row => (
+              <tr key={row.id}>
+                <td>{row.id}</td>
+                {columns.map(col =>
+                  col !== 'geom' && col !== 'id' ? (
+                    <td key={col}>{row.attributes[col] ?? '-'}</td>
+                  ) : null
+                )}
+                <td>
+                  {row.geometry ? JSON.stringify(row.geometry) : '-'}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  {columns.map((col, j) => (
-                    <td key={j} className="border px-4 py-2">
-                      {row[col] !== undefined ? row[col].toString() : ""}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
+
+      <div style={{ marginTop: '10px' }}>
+        <button onClick={handlePrev} disabled={page === 1}>
+          Prev
+        </button>
+        <span style={{ margin: '0 10px' }}>
+          Page {page} of {totalPages}
+        </span>
+        <button onClick={handleNext} disabled={page === totalPages}>
+          Next
+        </button>
+      </div>
     </div>
   );
 };
