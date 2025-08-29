@@ -607,15 +607,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
 import { Sparklines, SparklinesLine } from 'react-sparklines';
+import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 
 function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
   const [hover, setHover] = useState(false);
   const [sparkData, setSparkData] = useState([]);
-
-  // Animated counters for badges
   const animatedValues = extraInfo?.badges?.map(badge => useMotionValue(badge.value)) || [];
 
-  // Animate badge values on change
   useEffect(() => {
     if (extraInfo?.badges) {
       extraInfo.badges.forEach((badge, idx) => {
@@ -625,7 +623,6 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
     }
   }, [extraInfo]);
 
-  // Sparkline update
   useEffect(() => {
     if (extraInfo?.badges) {
       const total = extraInfo.badges.reduce((sum, b) => sum + b.value, 0);
@@ -661,12 +658,11 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '220px',
+        minHeight: '300px',
         position: 'relative',
         transition: 'all 0.2s ease'
       }}
     >
-      {/* Tooltip */}
       <AnimatePresence>
         {hover && extraInfo?.text && (
           <motion.div
@@ -693,7 +689,6 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
         )}
       </AnimatePresence>
 
-      {/* Icon */}
       <div style={{
         backgroundColor: color,
         borderRadius: '8px',
@@ -707,10 +702,23 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
         <Icon style={{ width: '24px', height: '24px', color: '#fff' }} />
       </div>
 
-      {/* Category Title */}
       <h3 style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '8px' }}>{category}</h3>
 
-      {/* Animated Badges */}
+      {extraInfo?.geojson && extraInfo.geojson.features?.length > 0 && (
+        <MapContainer
+          style={{ height: '100px', width: '100%', borderRadius: '8px', marginBottom: '12px' }}
+          bounds={extraInfo.geojson.features.map(f => [f.geometry.coordinates[1], f.geometry.coordinates[0]])}
+          scrollWheelZoom={false}
+          dragging={false}
+          doubleClickZoom={false}
+          zoomControl={false}
+          attributionControl={false}
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <GeoJSON data={extraInfo.geojson} style={{ color, weight: 2 }} />
+        </MapContainer>
+      )}
+
       {total > 0 && (
         <div style={{ marginBottom: '12px' }}>
           {extraInfo.badges.map((badge, idx) => {
@@ -719,17 +727,10 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
               <div key={idx} style={{ marginBottom: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '2px' }}>
                   <span>{badge.label}</span>
-                  <motion.span>
-                    {Math.round(animatedValues[idx]?.get() || 0)}
-                  </motion.span>
+                  <motion.span>{Math.round(animatedValues[idx]?.get() || 0)}</motion.span>
                 </div>
                 <div style={{ background: '#374151', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${widthPercent}%` }}
-                    transition={{ duration: 0.5 }}
-                    style={{ height: '100%', backgroundColor: badge.color }}
-                  />
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${widthPercent}%` }} transition={{ duration: 0.5 }} style={{ height: '100%', backgroundColor: badge.color }} />
                 </div>
               </div>
             );
@@ -737,7 +738,6 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
         </div>
       )}
 
-      {/* Mini Sparkline */}
       {sparkData.length > 0 && (
         <div style={{ marginBottom: '8px' }}>
           <Sparklines data={sparkData} limit={10} width={100} height={30}>
@@ -746,7 +746,6 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
         </div>
       )}
 
-      {/* Extra Text */}
       {extraInfo?.text && (
         <p style={{ fontSize: '0.75rem', color: '#d1d5db', marginTop: 'auto' }}>
           {extraInfo.text}
@@ -770,6 +769,7 @@ DashboardCard.propTypes = {
         color: PropTypes.string.isRequired,
       })
     ),
+    geojson: PropTypes.object,
   }),
 };
 

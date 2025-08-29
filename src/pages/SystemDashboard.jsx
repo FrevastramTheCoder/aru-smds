@@ -1075,15 +1075,11 @@
 // export default SystemDashboard;
 
 //professional
-// src/pages/SystemDashboard.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import {
-  Building2, MapPin, Footprints, TreeDeciduous, Car, Trash2, Zap,
-  Droplet, Waves, Fence, Lightbulb, Trees, User, Map, Upload, LogOut, Sun, Moon
-} from 'lucide-react';
+import { Building2, MapPin, Footprints, TreeDeciduous, Car, Trash2, Zap, Droplet, Waves, Fence, Lightbulb, Trees, User, Map, Upload, LogOut, Sun, Moon } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
 
 const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
@@ -1109,7 +1105,7 @@ const checkTokenValidity = (token) => {
 };
 
 const generateShortReport = (category, features) => {
-  if (!features || features.length === 0) return { text: 'No data', badges: [] };
+  if (!features || !Array.isArray(features)) return { text: 'No data', badges: [], geojson: { type: 'FeatureCollection', features: [] } };
   const badges = [];
   switch (category) {
     case 'Roads': {
@@ -1117,18 +1113,18 @@ const generateShortReport = (category, features) => {
       const poor = features.filter(f => f.properties?.condition === 'poor').length;
       badges.push({ label: 'Good', value: good, color: '#10b981' });
       badges.push({ label: 'Poor', value: poor, color: '#ef4444' });
-      return { text: 'Road conditions', badges };
+      return { text: 'Road conditions', badges, geojson: { type: 'FeatureCollection', features } };
     }
     case 'Buildings': {
       const res = features.filter(f => f.properties?.type === 'residential').length;
       const com = features.filter(f => f.properties?.type === 'commercial').length;
       badges.push({ label: 'Residential', value: res, color: '#3b82f6' });
       badges.push({ label: 'Commercial', value: com, color: '#facc15' });
-      return { text: 'Building types', badges };
+      return { text: 'Building types', badges, geojson: { type: 'FeatureCollection', features } };
     }
     default:
       badges.push({ label: 'Count', value: features.length, color: '#818cf8' });
-      return { text: `${features.length} features`, badges };
+      return { text: `${features.length} features`, badges, geojson: { type: 'FeatureCollection', features } };
   }
 };
 
@@ -1144,27 +1140,35 @@ function SystemDashboard() {
     if (!token || !checkTokenValidity(token)) { navigate('/login'); return; }
 
     setLoadingReports(prev => ({ ...prev, [categoryKey]: true }));
+
     try {
-      const res = await axios.get(`${SPATIAL_API_BASE}/geojson/${categoryKey.toLowerCase().replace(/\s+/g, '-')}`, { headers: { Authorization: `Bearer ${token}` } });
-      const features = res.data.features || [];
+      const res = await axios.get(`${SPATIAL_API_BASE}/geojson/${categoryKey.toLowerCase().replace(/\s+/g, '-')}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const features = Array.isArray(res.data.features) ? res.data.features : [];
       setReports(prev => ({ ...prev, [categoryKey]: generateShortReport(categoryKey, features) }));
-    } catch {
-      setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', badges: [] } }));
+    } catch (err) {
+      console.error(err);
+      setReports(prev => ({ ...prev, [categoryKey]: { text: err.response?.status === 404 ? 'Not Found' : 'Failed', badges: [], geojson: { type: 'FeatureCollection', features: [] } } }));
     } finally {
       setLoadingReports(prev => ({ ...prev, [categoryKey]: false }));
     }
   }, [navigate]);
 
-  const fetchAllData = useCallback(() => DASHBOARD_CATEGORIES.forEach(c => fetchCategoryData(c.key)), [fetchCategoryData]);
+  const fetchAllDataThrottled = useCallback(async () => {
+    for (const cat of DASHBOARD_CATEGORIES) {
+      await fetchCategoryData(cat.key);
+      await new Promise(resolve => setTimeout(resolve, 500)); // 0.5s delay between requests to prevent 429
+    }
+  }, [fetchCategoryData]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
     localStorage.setItem('darkMode', darkMode);
-
-    fetchAllData();
-    const interval = setInterval(fetchAllData, 15000);
+    fetchAllDataThrottled();
+    const interval = setInterval(fetchAllDataThrottled, 30000); // every 30s
     return () => clearInterval(interval);
-  }, [darkMode, fetchAllData]);
+  }, [darkMode, fetchAllDataThrottled]);
 
   const handleCategorySelect = (category) => navigate(`/map?category=${category.toLowerCase().replace(/\s+/g, '-')}`);
   const handleLogout = () => { logout(); navigate('/login'); };
@@ -1172,7 +1176,6 @@ function SystemDashboard() {
 
   return (
     <div style={{ padding: '24px', minHeight: '100vh', background: darkMode ? '#111827' : '#f3f4f6', color: darkMode ? '#f9fafb' : '#111827', transition: 'all 0.3s' }}>
-      {/* Header */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <Link to="/" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: darkMode ? '#fff' : '#111827' }}>ArcGIS Pro Dashboard</Link>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -1183,15 +1186,14 @@ function SystemDashboard() {
         </div>
       </header>
 
-      {/* Dashboard Grid */}
-      <main style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
+      <main style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
         {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
           <DashboardCard
             key={key}
             category={key}
             Icon={icon}
             color={color}
-            extraInfo={loadingReports[key] ? { text: 'Loading...', badges: [] } : reports[key]}
+            extraInfo={loadingReports[key] ? { text: 'Loading...', badges: [], geojson: { type: 'FeatureCollection', features: [] } } : reports[key]}
             onSelect={handleCategorySelect}
           />
         ))}
