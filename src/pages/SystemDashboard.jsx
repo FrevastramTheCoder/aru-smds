@@ -563,7 +563,235 @@
 
 // export default SystemDashboard;
 
-//final report
+// //final report
+// import React, { useEffect, useState, useCallback } from 'react';
+// import { useNavigate, Link } from 'react-router-dom';
+// import { useAuth } from '../context/AuthContext';
+// import axios from 'axios';
+// import {
+//   Building2,
+//   MapPin,
+//   Footprints,
+//   TreeDeciduous,
+//   Car,
+//   Trash2,
+//   Zap,
+//   Droplet,
+//   Waves,
+//   Fence,
+//   Lightbulb,
+//   Trees,
+//   User,
+//   Map,
+//   Upload,
+//   LogOut,
+//   Sun,
+//   Moon,
+// } from 'lucide-react';
+// import DashboardCard from '../components/DashboardCard';
+
+// // Retry fetch helper
+// const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+//   for (let i = 0; i < maxRetries; i++) {
+//     try {
+//       const controller = new AbortController();
+//       const timeoutId = setTimeout(() => controller.abort(), timeout);
+//       const response = await axios({ ...options, url, signal: controller.signal });
+//       clearTimeout(timeoutId);
+//       return response;
+//     } catch (error) {
+//       if (error.response?.status === 404) throw error;
+//       if (error.response?.status === 429) {
+//         const retryAfter = error.response.headers['retry-after'] || 5;
+//         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+//         continue;
+//       }
+//       if (i === maxRetries - 1) throw error;
+//       await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+//     }
+//   }
+// };
+
+// // Token validation
+// const checkTokenValidity = (token) => {
+//   if (!token) return false;
+//   try {
+//     const payload = JSON.parse(atob(token.split('.')[1]));
+//     return payload.exp * 1000 > Date.now();
+//   } catch {
+//     return false;
+//   }
+// };
+
+// // Generate short report with optional icon for metric
+// const generateShortReport = (category, features) => {
+//   if (!features || features.length === 0) return { text: 'No data', icon: null };
+
+//   switch (category) {
+//     case 'Roads': {
+//       const good = features.filter(f => f.properties?.condition === 'good').length;
+//       const poor = features.filter(f => f.properties?.condition === 'poor').length;
+//       return { text: `Good: ${good} | Poor: ${poor}`, icon: MapPin };
+//     }
+//     case 'Buildings': {
+//       const residential = features.filter(f => f.properties?.type === 'residential').length;
+//       const commercial = features.filter(f => f.properties?.type === 'commercial').length;
+//       return { text: `Residential: ${residential} | Commercial: ${commercial}`, icon: Building2 };
+//     }
+//     case 'Footpaths':
+//       return { text: `Footpaths: ${features.length}`, icon: Footprints };
+//     case 'Vegetation':
+//       return { text: `Trees: ${features.length}`, icon: TreeDeciduous };
+//     case 'Parking':
+//       return { text: `Spots: ${features.length}`, icon: Car };
+//     case 'Solid Waste':
+//       return { text: `Waste points: ${features.length}`, icon: Trash2 };
+//     case 'Electricity':
+//       return { text: `Poles: ${features.length}`, icon: Zap };
+//     case 'Water Supply':
+//       return { text: `Points: ${features.length}`, icon: Droplet };
+//     case 'Drainage System':
+//       return { text: `Units: ${features.length}`, icon: Waves };
+//     case 'Vimbweta':
+//       return { text: `Fences: ${features.length}`, icon: Fence };
+//     case 'Security Lights':
+//       return { text: `Lights: ${features.length}`, icon: Lightbulb };
+//     case 'Recreational Areas':
+//       return { text: `Areas: ${features.length}`, icon: Trees };
+//     default:
+//       return { text: `${features.length} features`, icon: null };
+//   }
+// };
+
+// function SystemDashboard() {
+//   const { currentUser, logout } = useAuth();
+//   const navigate = useNavigate();
+//   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
+//   const [loading, setLoading] = useState(true);
+//   const [reports, setReports] = useState({});
+//   const [loadingReports, setLoadingReports] = useState({});
+
+//   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+
+//   const DASHBOARD_CATEGORIES = [
+//     { key: 'Buildings', icon: Building2, color: '#f87171' },
+//     { key: 'Roads', icon: MapPin, color: '#fbbf24' },
+//     { key: 'Footpaths', icon: Footprints, color: '#4ade80' },
+//     { key: 'Vegetation', icon: TreeDeciduous, color: '#34d399' },
+//     { key: 'Parking', icon: Car, color: '#818cf8' },
+//     { key: 'Solid Waste', icon: Trash2, color: '#a78bfa' },
+//     { key: 'Electricity', icon: Zap, color: '#f472b6' },
+//     { key: 'Water Supply', icon: Droplet, color: '#60a5fa' },
+//     { key: 'Drainage System', icon: Waves, color: '#22d3ee' },
+//     { key: 'Vimbweta', icon: Fence, color: '#facc15' },
+//     { key: 'Security Lights', icon: Lightbulb, color: '#bef264' },
+//     { key: 'Recreational Areas', icon: Trees, color: '#e879f9' },
+//   ];
+
+//   // Fetch per-category data
+//   const fetchCategoryData = useCallback(async (categoryKey) => {
+//     const token = localStorage.getItem('token');
+//     if (!token || !checkTokenValidity(token)) {
+//       navigate('/login');
+//       return;
+//     }
+
+//     setLoadingReports(prev => ({ ...prev, [categoryKey]: true }));
+//     const endpoint = `${SPATIAL_API_BASE}/geojson/${categoryKey.toLowerCase().replace(/\s+/g, '-')}`;
+//     try {
+//       const res = await fetchWithRetry(endpoint, {
+//         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+//       });
+//       const features = res.data.features || [];
+//       setReports(prev => ({ ...prev, [categoryKey]: generateShortReport(categoryKey, features) }));
+//     } catch {
+//       setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', icon: null } }));
+//     } finally {
+//       setLoadingReports(prev => ({ ...prev, [categoryKey]: false }));
+//     }
+//   }, [navigate]);
+
+//   const fetchAllData = useCallback(() => {
+//     DASHBOARD_CATEGORIES.forEach(({ key }) => fetchCategoryData(key));
+//   }, [fetchCategoryData]);
+
+//   useEffect(() => {
+//     document.documentElement.classList.toggle('dark', darkMode);
+//     localStorage.setItem('darkMode', darkMode);
+
+//     setTimeout(() => setLoading(false), 500);
+
+//     fetchAllData();
+//     const interval = setInterval(fetchAllData, 15000);
+//     return () => clearInterval(interval);
+//   }, [darkMode, fetchAllData]);
+
+//   const handleCategorySelect = (category) => {
+//     const slug = category.toLowerCase().replace(/\s+/g, '-');
+//     navigate(`/map?category=${slug}`);
+//   };
+
+//   const toggleDarkMode = () => setDarkMode(prev => !prev);
+//   const handleLogout = () => { logout(); navigate('/login'); };
+
+//   if (loading) return <div className="loading-spinner"></div>;
+
+//   return (
+//     <div className="system-dashboard">
+//       <div className="circle-blue"></div>
+//       <div className="circle-fuchsia"></div>
+//       <header className="dashboard-header">
+//         <Link to="/" className="flex items-center">
+//           <h1 className="text-xl font-bold">Ardhi Spatial System</h1>
+//         </Link>
+//         <div className="header-buttons">
+//           <div className="flex items-center space-x-2">
+//             <User className="w-4 h-4" />
+//             <span>{currentUser?.username || currentUser?.email}</span>
+//           </div>
+//           <button onClick={() => navigate('/map')} className="flex items-center space-x-1">
+//             <Map className="w-5 h-5" />
+//             <span>Map</span>
+//           </button>
+//           <button onClick={() => navigate('/data')} className="flex items-center space-x-1">
+//             <Upload className="w-5 h-5" />
+//             <span>Data</span>
+//           </button>
+//           <button onClick={handleLogout} className="flex items-center space-x-1">
+//             <LogOut className="w-5 h-5" />
+//             <span>Logout</span>
+//           </button>
+//           <button onClick={toggleDarkMode} className="p-2 rounded-full" aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
+//             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+//           </button>
+//         </div>
+//       </header>
+
+//       <main className="dashboard-main">
+//         <div className="dashboard-header-text">
+//           <h2>System Dashboard</h2>
+//           <p>Real-time spatial data summary with icons</p>
+//         </div>
+//         <div className="dashboard-grid">
+//           {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
+//             <DashboardCard
+//               key={key}
+//               category={key}
+//               Icon={icon}
+//               color={color}
+//               extraInfo={loadingReports[key] ? { text: 'Loading...', icon: null } : reports[key]}
+//               onSelect={handleCategorySelect}
+//             />
+//           ))}
+//         </div>
+//       </main>
+//     </div>
+//   );
+// }
+
+// export default SystemDashboard;
+
+//final codes
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -590,7 +818,9 @@ import {
 } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
 
+// ------------------------
 // Retry fetch helper
+// ------------------------
 const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -612,7 +842,9 @@ const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => 
   }
 };
 
+// ------------------------
 // Token validation
+// ------------------------
 const checkTokenValidity = (token) => {
   if (!token) return false;
   try {
@@ -623,43 +855,86 @@ const checkTokenValidity = (token) => {
   }
 };
 
-// Generate short report with optional icon for metric
+// ------------------------
+// Generate short report with colored badges
+// ------------------------
 const generateShortReport = (category, features) => {
   if (!features || features.length === 0) return { text: 'No data', icon: null };
 
+  const badges = [];
   switch (category) {
     case 'Roads': {
       const good = features.filter(f => f.properties?.condition === 'good').length;
       const poor = features.filter(f => f.properties?.condition === 'poor').length;
-      return { text: `Good: ${good} | Poor: ${poor}`, icon: MapPin };
+      badges.push({ label: 'Good', value: good, color: 'green' });
+      badges.push({ label: 'Poor', value: poor, color: 'red' });
+      return { badges, icon: MapPin, text: 'Road condition summary' };
     }
     case 'Buildings': {
-      const residential = features.filter(f => f.properties?.type === 'residential').length;
-      const commercial = features.filter(f => f.properties?.type === 'commercial').length;
-      return { text: `Residential: ${residential} | Commercial: ${commercial}`, icon: Building2 };
+      const good = features.filter(f => f.properties?.condition === 'good').length;
+      const bad = features.filter(f => f.properties?.condition === 'bad').length;
+      badges.push({ label: 'Good', value: good, color: 'green' });
+      badges.push({ label: 'Bad', value: bad, color: 'red' });
+      return { badges, icon: Building2, text: 'Building condition summary' };
     }
-    case 'Footpaths':
-      return { text: `Footpaths: ${features.length}`, icon: Footprints };
-    case 'Vegetation':
-      return { text: `Trees: ${features.length}`, icon: TreeDeciduous };
-    case 'Parking':
-      return { text: `Spots: ${features.length}`, icon: Car };
-    case 'Solid Waste':
-      return { text: `Waste points: ${features.length}`, icon: Trash2 };
-    case 'Electricity':
-      return { text: `Poles: ${features.length}`, icon: Zap };
-    case 'Water Supply':
-      return { text: `Points: ${features.length}`, icon: Droplet };
-    case 'Drainage System':
-      return { text: `Units: ${features.length}`, icon: Waves };
-    case 'Vimbweta':
-      return { text: `Fences: ${features.length}`, icon: Fence };
-    case 'Security Lights':
-      return { text: `Lights: ${features.length}`, icon: Lightbulb };
-    case 'Recreational Areas':
-      return { text: `Areas: ${features.length}`, icon: Trees };
+    case 'Footpaths': {
+      const paved = features.filter(f => f.properties?.type === 'paved').length;
+      const unpaved = features.filter(f => f.properties?.type === 'unpaved').length;
+      badges.push({ label: 'Paved', value: paved, color: 'green' });
+      badges.push({ label: 'Unpaved', value: unpaved, color: 'orange' });
+      return { badges, icon: Footprints, text: 'Footpaths condition' };
+    }
+    case 'Vegetation': {
+      const trees = features.filter(f => f.properties?.type === 'tree').length;
+      const shrubs = features.filter(f => f.properties?.type === 'shrub').length;
+      badges.push({ label: 'Trees', value: trees, color: 'green' });
+      badges.push({ label: 'Shrubs', value: shrubs, color: 'brown' });
+      return { badges, icon: TreeDeciduous, text: 'Vegetation types' };
+    }
+    case 'Parking': {
+      const occupied = features.filter(f => f.properties?.status === 'occupied').length;
+      const free = features.filter(f => f.properties?.status === 'free').length;
+      badges.push({ label: 'Occupied', value: occupied, color: 'red' });
+      badges.push({ label: 'Free', value: free, color: 'green' });
+      return { badges, icon: Car, text: 'Parking status' };
+    }
+    case 'Solid Waste': {
+      badges.push({ label: 'Points', value: features.length, color: 'gray' });
+      return { badges, icon: Trash2, text: 'Waste points' };
+    }
+    case 'Electricity': {
+      badges.push({ label: 'Poles', value: features.length, color: 'yellow' });
+      return { badges, icon: Zap, text: 'Electricity poles' };
+    }
+    case 'Water Supply': {
+      badges.push({ label: 'Points', value: features.length, color: 'blue' });
+      return { badges, icon: Droplet, text: 'Water supply points' };
+    }
+    case 'Drainage System': {
+      const open = features.filter(f => f.properties?.type === 'open').length;
+      const covered = features.filter(f => f.properties?.type === 'covered').length;
+      badges.push({ label: 'Open', value: open, color: 'orange' });
+      badges.push({ label: 'Covered', value: covered, color: 'blue' });
+      return { badges, icon: Waves, text: 'Drainage types' };
+    }
+    case 'Vimbweta': {
+      badges.push({ label: 'Fences', value: features.length, color: 'brown' });
+      return { badges, icon: Fence, text: 'Fence points' };
+    }
+    case 'Security Lights': {
+      const on = features.filter(f => f.properties?.status === 'on').length;
+      const off = features.filter(f => f.properties?.status === 'off').length;
+      badges.push({ label: 'On', value: on, color: 'green' });
+      badges.push({ label: 'Off', value: off, color: 'red' });
+      return { badges, icon: Lightbulb, text: 'Light status' };
+    }
+    case 'Recreational Areas': {
+      badges.push({ label: 'Areas', value: features.length, color: 'purple' });
+      return { badges, icon: Trees, text: 'Recreational areas' };
+    }
     default:
-      return { text: `${features.length} features`, icon: null };
+      badges.push({ label: 'Features', value: features.length, color: 'gray' });
+      return { badges, icon: null, text: `${features.length} features` };
   }
 };
 
@@ -688,7 +963,9 @@ function SystemDashboard() {
     { key: 'Recreational Areas', icon: Trees, color: '#e879f9' },
   ];
 
+  // ------------------------
   // Fetch per-category data
+  // ------------------------
   const fetchCategoryData = useCallback(async (categoryKey) => {
     const token = localStorage.getItem('token');
     if (!token || !checkTokenValidity(token)) {
@@ -705,7 +982,7 @@ function SystemDashboard() {
       const features = res.data.features || [];
       setReports(prev => ({ ...prev, [categoryKey]: generateShortReport(categoryKey, features) }));
     } catch {
-      setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', icon: null } }));
+      setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', icon: null, badges: [] } }));
     } finally {
       setLoadingReports(prev => ({ ...prev, [categoryKey]: false }));
     }
@@ -770,7 +1047,7 @@ function SystemDashboard() {
       <main className="dashboard-main">
         <div className="dashboard-header-text">
           <h2>System Dashboard</h2>
-          <p>Real-time spatial data summary with icons</p>
+          <p>Real-time spatial data summary with colored badges</p>
         </div>
         <div className="dashboard-grid">
           {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
@@ -779,7 +1056,7 @@ function SystemDashboard() {
               category={key}
               Icon={icon}
               color={color}
-              extraInfo={loadingReports[key] ? { text: 'Loading...', icon: null } : reports[key]}
+              extraInfo={loadingReports[key] ? { text: 'Loading...', icon: null, badges: [] } : reports[key]}
               onSelect={handleCategorySelect}
             />
           ))}

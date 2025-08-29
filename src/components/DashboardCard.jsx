@@ -230,11 +230,73 @@
 
 // export default DashboardCard;
 
-//final report
+// //final report
+// import React, { useCallback } from 'react';
+// import PropTypes from 'prop-types';
+// import { motion } from 'framer-motion';
+
+// function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
+//   const handleKeyDown = useCallback(
+//     (e) => {
+//       if (e.key === 'Enter' || e.key === ' ') {
+//         onSelect(category);
+//       }
+//     },
+//     [category, onSelect]
+//   );
+
+//   return (
+//     <motion.div
+//       initial={{ opacity: 0, y: 20, scale: 0.95 }}
+//       whileInView={{ opacity: 1, y: 0, scale: 1 }}
+//       transition={{ duration: 0.4 }}
+//       viewport={{ once: true }}
+//       onClick={() => onSelect(category)}
+//       onKeyDown={handleKeyDown}
+//       role="button"
+//       tabIndex={0}
+//       className="dashboard-card"
+//     >
+//       <div className="tooltip">
+//         <div className="dashboard-card-icon" style={{ backgroundColor: color }}>
+//           <Icon className="icon" />
+//         </div>
+//         <span className="tooltip-text">View {category} data</span>
+//       </div>
+
+//       <h3 className="dashboard-card-title">{category}</h3>
+
+//       {extraInfo && (
+//         <p className="dashboard-card-extra" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+//           {extraInfo.icon && <extraInfo.icon className="w-4 h-4" />}
+//           <span>{extraInfo.text}</span>
+//         </p>
+//       )}
+//     </motion.div>
+//   );
+// }
+
+// DashboardCard.propTypes = {
+//   category: PropTypes.string.isRequired,
+//   Icon: PropTypes.elementType.isRequired,
+//   color: PropTypes.string.isRequired,
+//   onSelect: PropTypes.func.isRequired,
+//   extraInfo: PropTypes.shape({
+//     text: PropTypes.string,
+//     icon: PropTypes.elementType,
+//   }),
+// };
+
+// export default DashboardCard;
+
+//finalllllllyyyy
 import React, { useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { motion } from 'framer-motion';
 
+/**
+ * Dashboard card component with real-time report and colored badges
+ */
 function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
   const handleKeyDown = useCallback(
     (e) => {
@@ -266,9 +328,28 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
 
       <h3 className="dashboard-card-title">{category}</h3>
 
-      {extraInfo && (
-        <p className="dashboard-card-extra" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          {extraInfo.icon && <extraInfo.icon className="w-4 h-4" />}
+      {extraInfo && extraInfo.badges && (
+        <div className="dashboard-card-badges" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {extraInfo.badges.map((badge, idx) => (
+            <span
+              key={idx}
+              style={{
+                backgroundColor: badge.color,
+                color: '#fff',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '0.75rem',
+              }}
+            >
+              {badge.label}: {badge.value}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {extraInfo && extraInfo.icon && extraInfo.text && (
+        <p className="dashboard-card-extra" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px' }}>
+          <extraInfo.icon className="w-4 h-4" />
           <span>{extraInfo.text}</span>
         </p>
       )}
@@ -284,6 +365,13 @@ DashboardCard.propTypes = {
   extraInfo: PropTypes.shape({
     text: PropTypes.string,
     icon: PropTypes.elementType,
+    badges: PropTypes.arrayOf(
+      PropTypes.shape({
+        label: PropTypes.string.isRequired,
+        value: PropTypes.number.isRequired,
+        color: PropTypes.string.isRequired,
+      })
+    ),
   }),
 };
 
