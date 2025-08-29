@@ -289,102 +289,13 @@
 
 // export default DashboardCard;
 
-// //finalllllllyyyy
-// import React, { useCallback } from 'react';
-// import PropTypes from 'prop-types';
-// import { motion } from 'framer-motion';
-
-// /**
-//  * Dashboard card component with real-time report and colored badges
-//  */
-// function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
-//   const handleKeyDown = useCallback(
-//     (e) => {
-//       if (e.key === 'Enter' || e.key === ' ') {
-//         onSelect(category);
-//       }
-//     },
-//     [category, onSelect]
-//   );
-
-//   return (
-//     <motion.div
-//       initial={{ opacity: 0, y: 20, scale: 0.95 }}
-//       whileInView={{ opacity: 1, y: 0, scale: 1 }}
-//       transition={{ duration: 0.4 }}
-//       viewport={{ once: true }}
-//       onClick={() => onSelect(category)}
-//       onKeyDown={handleKeyDown}
-//       role="button"
-//       tabIndex={0}
-//       className="dashboard-card"
-//     >
-//       <div className="tooltip">
-//         <div className="dashboard-card-icon" style={{ backgroundColor: color }}>
-//           <Icon className="icon" />
-//         </div>
-//         <span className="tooltip-text">View {category} data</span>
-//       </div>
-
-//       <h3 className="dashboard-card-title">{category}</h3>
-
-//       {extraInfo && extraInfo.badges && (
-//         <div className="dashboard-card-badges" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-//           {extraInfo.badges.map((badge, idx) => (
-//             <span
-//               key={idx}
-//               style={{
-//                 backgroundColor: badge.color,
-//                 color: '#fff',
-//                 padding: '2px 6px',
-//                 borderRadius: '4px',
-//                 fontSize: '0.75rem',
-//               }}
-//             >
-//               {badge.label}: {badge.value}
-//             </span>
-//           ))}
-//         </div>
-//       )}
-
-//       {extraInfo && extraInfo.icon && extraInfo.text && (
-//         <p className="dashboard-card-extra" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px' }}>
-//           <extraInfo.icon className="w-4 h-4" />
-//           <span>{extraInfo.text}</span>
-//         </p>
-//       )}
-//     </motion.div>
-//   );
-// }
-
-// DashboardCard.propTypes = {
-//   category: PropTypes.string.isRequired,
-//   Icon: PropTypes.elementType.isRequired,
-//   color: PropTypes.string.isRequired,
-//   onSelect: PropTypes.func.isRequired,
-//   extraInfo: PropTypes.shape({
-//     text: PropTypes.string,
-//     icon: PropTypes.elementType,
-//     badges: PropTypes.arrayOf(
-//       PropTypes.shape({
-//         label: PropTypes.string.isRequired,
-//         value: PropTypes.number.isRequired,
-//         color: PropTypes.string.isRequired,
-//       })
-//     ),
-//   }),
-// };
-
-// export default DashboardCard;
-
-///almost there
-// DashboardCard.jsx
+//finalllllllyyyy
 import React, { useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { motion } from 'framer-motion';
 
 /**
- * Dashboard card with badges and mini bar chart for ratios
+ * Dashboard card component with real-time report and colored badges
  */
 function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
   const handleKeyDown = useCallback(
@@ -395,8 +306,6 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
     },
     [category, onSelect]
   );
-
-  const total = extraInfo?.badges?.reduce((sum, b) => sum + b.value, 0) || 0;
 
   return (
     <motion.div
@@ -409,46 +318,39 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
       role="button"
       tabIndex={0}
       className="dashboard-card"
-      style={{
-        background: '#fff',
-        borderRadius: '12px',
-        padding: '16px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-        cursor: 'pointer',
-        transition: 'transform 0.2s ease',
-      }}
-      whileHover={{ scale: 1.03 }}
     >
-      <div className="dashboard-card-header" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div className="dashboard-card-icon" style={{ backgroundColor: color, borderRadius: '8px', padding: '8px' }}>
-          <Icon className="icon" size={24} />
+      <div className="tooltip">
+        <div className="dashboard-card-icon" style={{ backgroundColor: color }}>
+          <Icon className="icon" />
         </div>
-        <h3 className="dashboard-card-title" style={{ margin: 0 }}>{category}</h3>
+        <span className="tooltip-text">View {category} data</span>
       </div>
 
-      {extraInfo && extraInfo.badges && total > 0 && (
-        <div className="dashboard-card-badges" style={{ marginTop: '12px' }}>
-          {extraInfo.badges.map((badge, idx) => {
-            const widthPercent = total ? (badge.value / total) * 100 : 0;
-            return (
-              <div key={idx} style={{ marginBottom: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '2px' }}>
-                  <span>{badge.label}</span>
-                  <span>{badge.value}</span>
-                </div>
-                <div style={{ background: '#e5e7eb', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                  <div style={{ width: `${widthPercent}%`, backgroundColor: badge.color, height: '100%' }} />
-                </div>
-              </div>
-            );
-          })}
+      <h3 className="dashboard-card-title">{category}</h3>
+
+      {extraInfo && extraInfo.badges && (
+        <div className="dashboard-card-badges" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {extraInfo.badges.map((badge, idx) => (
+            <span
+              key={idx}
+              style={{
+                backgroundColor: badge.color,
+                color: '#fff',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '0.75rem',
+              }}
+            >
+              {badge.label}: {badge.value}
+            </span>
+          ))}
         </div>
       )}
 
-      {extraInfo && extraInfo.text && (
-        <p style={{ marginTop: '12px', fontSize: '0.8rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          {extraInfo.icon && <extraInfo.icon size={16} />}
-          {extraInfo.text}
+      {extraInfo && extraInfo.icon && extraInfo.text && (
+        <p className="dashboard-card-extra" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px' }}>
+          <extraInfo.icon className="w-4 h-4" />
+          <span>{extraInfo.text}</span>
         </p>
       )}
     </motion.div>
