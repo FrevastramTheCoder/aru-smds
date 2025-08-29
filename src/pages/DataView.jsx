@@ -1671,8 +1671,263 @@
 //   );
 // };
 
+// // export default DataView;
+// //almost there 
+// // src/pages/DataView.jsx
+// import React, { useEffect, useRef, useState, useCallback } from 'react';
+// import { useLocation, useNavigate } from 'react-router-dom';
+// import axios from 'axios';
+
+// // ------------------------
+// // Debounce helper
+// // ------------------------
+// function debounce(fn, wait) {
+//   let t;
+//   return (...args) => {
+//     clearTimeout(t);
+//     t = setTimeout(() => fn(...args), wait);
+//   };
+// }
+
+// // ------------------------
+// // Retry fetch helper with exponential backoff
+// // ------------------------
+// const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+//   for (let i = 0; i < maxRetries; i++) {
+//     try {
+//       const controller = new AbortController();
+//       const timeoutId = setTimeout(() => controller.abort(), timeout);
+//       const response = await axios({ ...options, url, signal: controller.signal });
+//       clearTimeout(timeoutId);
+//       return response;
+//     } catch (error) {
+//       if (error.response?.status === 404) throw error;
+//       if (error.response?.status === 429) {
+//         const retryAfter = error.response.headers['retry-after'] || 5;
+//         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+//         continue;
+//       }
+//       if (i === maxRetries - 1) throw error;
+//       await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+//     }
+//   }
+// };
+
+// // ------------------------
+// // Token validation helper
+// // ------------------------
+// const checkTokenValidity = (token) => {
+//   if (!token) return false;
+//   try {
+//     const payload = JSON.parse(atob(token.split('.')[1]));
+//     return payload.exp * 1000 > Date.now();
+//   } catch {
+//     return false;
+//   }
+// };
+
+// // ------------------------
+// // Local storage caching
+// // ------------------------
+// const useLocalStorageCache = (key, ttl = 3600000) => {
+//   const get = useCallback(() => {
+//     try {
+//       const item = localStorage.getItem(key);
+//       if (!item) return null;
+//       const { value, timestamp } = JSON.parse(item);
+//       if (Date.now() - timestamp > ttl) {
+//         localStorage.removeItem(key);
+//         return null;
+//       }
+//       return value;
+//     } catch {
+//       return null;
+//     }
+//   }, [key, ttl]);
+
+//   const set = useCallback((value) => {
+//     try {
+//       localStorage.setItem(key, JSON.stringify({ value, timestamp: Date.now() }));
+//     } catch {}
+//   }, [key]);
+
+//   return { get, set };
+// };
+
+// // ------------------------
+// // DataView Page
+// // ------------------------
+// function DataView() {
+//   const [spatialData, setSpatialData] = useState({});
+//   const [error, setError] = useState('');
+//   const [loading, setLoading] = useState(false);
+//   const [searchQuery, setSearchQuery] = useState('');
+//   const [filteredFeatures, setFilteredFeatures] = useState({});
+//   const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
+//   const [failedLayers, setFailedLayers] = useState(new Set());
+//   const location = useLocation();
+//   const navigate = useNavigate();
+
+//   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+//   const API_ENDPOINTS = {
+//     buildings: `${SPATIAL_API_BASE}/geojson/buildings`,
+//     roads: `${SPATIAL_API_BASE}/geojson/roads`,
+//     footpaths: `${SPATIAL_API_BASE}/geojson/footpaths`,
+//     vegetation: `${SPATIAL_API_BASE}/geojson/vegetation`,
+//     parking: `${SPATIAL_API_BASE}/geojson/parking`,
+//     solid_waste: `${SPATIAL_API_BASE}/geojson/solid-waste`,
+//     electricity: `${SPATIAL_API_BASE}/geojson/electricity`,
+//     water_supply: `${SPATIAL_API_BASE}/geojson/water-supply`,
+//     drainage: `${SPATIAL_API_BASE}/geojson/drainage`,
+//     vimbweta: `${SPATIAL_API_BASE}/geojson/vimbweta`,
+//     security: `${SPATIAL_API_BASE}/geojson/security`,
+//     recreational_areas: `${SPATIAL_API_BASE}/geojson/recreational-areas`,
+//     aru_boundary: `${SPATIAL_API_BASE}/geojson/aru-boundary`
+//   };
+
+//   const spatialCache = useLocalStorageCache('spatial-data-cache', 86400000);
+//   const spatialDataCache = useRef(new Map());
+
+//   // Authentication & initial data load
+//   useEffect(() => {
+//     const token = localStorage.getItem('token');
+//     if (!token || !checkTokenValidity(token)) {
+//       navigate('/login');
+//       return;
+//     }
+
+//     const cachedData = spatialCache.get();
+//     if (cachedData) setSpatialData(cachedData);
+
+//     const fetchInitialLayers = async () => {
+//       setLoading(true);
+//       try {
+//         const newSpatialData = {};
+//         for (const layer of selectedLayers) {
+//           try {
+//             const resp = await fetchWithRetry(API_ENDPOINTS[layer], {
+//               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+//             });
+//             newSpatialData[layer] = resp.data.features || [];
+//             spatialDataCache.current.set(layer, newSpatialData[layer]);
+//             setFailedLayers(prev => {
+//               const setCopy = new Set(prev);
+//               setCopy.delete(layer);
+//               return setCopy;
+//             });
+//           } catch {
+//             setFailedLayers(prev => new Set([...prev, layer]));
+//             newSpatialData[layer] = [];
+//           }
+//         }
+//         setSpatialData(newSpatialData);
+//         spatialCache.set(newSpatialData);
+//       } catch (err) {
+//         setError('Failed to fetch data');
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchInitialLayers();
+//   }, [navigate, selectedLayers]);
+
+//   // Search filter
+//   useEffect(() => {
+//     if (!searchQuery) {
+//       setFilteredFeatures({});
+//       return;
+//     }
+//     const filtered = {};
+//     Object.entries(spatialData).forEach(([layer, features]) => {
+//       filtered[layer] = features.filter(f =>
+//         f.properties && Object.values(f.properties).some(v =>
+//           v && v.toString().toLowerCase().includes(searchQuery.toLowerCase())
+//         )
+//       );
+//     });
+//     setFilteredFeatures(filtered);
+//   }, [searchQuery, spatialData]);
+
+//   const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+//   const totalFeatures = Object.values(displayData).reduce((sum, features) => sum + features.length, 0);
+
+//   // Export to CSV
+//   const exportData = (format = 'csv') => {
+//     try {
+//       const dataToExport = displayData;
+//       if (format === 'csv') {
+//         let csvContent = 'Layer,Feature Count\n';
+//         Object.entries(dataToExport).forEach(([layer, features]) => {
+//           csvContent += `${layer},${features.length}\n`;
+//         });
+//         const blob = new Blob([csvContent], { type: 'text/csv' });
+//         const url = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = url;
+//         a.download = `data-export-${new Date().toISOString().split('T')[0]}.csv`;
+//         document.body.appendChild(a);
+//         a.click();
+//         document.body.removeChild(a);
+//       }
+//     } catch (err) {
+//       setError('Export failed: ' + err.message);
+//     }
+//   };
+
+//   return (
+//     <div style={{ padding: '16px' }}>
+//       <h2>Data View (Tabular)</h2>
+//       <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }}>Logout</button>
+
+//       {error && <div style={{ color: 'red', margin: '10px 0' }}>{error}</div>}
+
+//       <input
+//         type="text"
+//         placeholder="Search features..."
+//         value={searchQuery}
+//         onChange={(e) => setSearchQuery(e.target.value)}
+//         style={{ padding: '8px', width: '300px', marginBottom: '16px' }}
+//       />
+
+//       <p>Total Features: {totalFeatures}</p>
+
+//       {loading && <p>Loading data...</p>}
+
+//       {Object.entries(displayData).map(([layer, features]) => (
+//         <div key={layer} style={{ marginBottom: '16px' }}>
+//           <h4>{layer.toUpperCase()} ({features.length})</h4>
+//           <table border="1" cellPadding="4" cellSpacing="0">
+//             <thead>
+//               <tr>
+//                 {features[0] && Object.keys(features[0].properties || {}).map(prop => (
+//                   <th key={prop}>{prop}</th>
+//                 ))}
+//               </tr>
+//             </thead>
+//             <tbody>
+//               {features.map((feature, idx) => (
+//                 <tr key={idx}>
+//                   {Object.values(feature.properties || {}).map((val, i) => (
+//                     <td key={i}>{val?.toString()}</td>
+//                   ))}
+//                 </tr>
+//               ))}
+//             </tbody>
+//           </table>
+//         </div>
+//       ))}
+
+//       <button onClick={() => exportData('csv')} style={{ marginTop: '16px', padding: '8px 12px' }}>Export CSV</button>
+//     </div>
+//   );
+// }
+
 // export default DataView;
-//almost there 
+
+
+//testing 
+
 // src/pages/DataView.jsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -1803,7 +2058,8 @@ function DataView() {
       setLoading(true);
       try {
         const newSpatialData = {};
-        for (const layer of selectedLayers) {
+        for (const layer of Object.keys(API_ENDPOINTS)) {
+          if (!selectedLayers.has(layer)) continue;
           try {
             const resp = await fetchWithRetry(API_ENDPOINTS[layer], {
               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
@@ -1820,8 +2076,8 @@ function DataView() {
             newSpatialData[layer] = [];
           }
         }
-        setSpatialData(newSpatialData);
-        spatialCache.set(newSpatialData);
+        setSpatialData(prev => ({ ...prev, ...newSpatialData }));
+        spatialCache.set({ ...spatialData, ...newSpatialData });
       } catch (err) {
         setError('Failed to fetch data');
       } finally {
@@ -1875,6 +2131,13 @@ function DataView() {
     }
   };
 
+  const toggleLayer = (layer) => {
+    const newSet = new Set(selectedLayers);
+    if (newSet.has(layer)) newSet.delete(layer);
+    else newSet.add(layer);
+    setSelectedLayers(newSet);
+  };
+
   return (
     <div style={{ padding: '16px' }}>
       <h2>Data View (Tabular)</h2>
@@ -1882,40 +2145,59 @@ function DataView() {
 
       {error && <div style={{ color: 'red', margin: '10px 0' }}>{error}</div>}
 
-      <input
-        type="text"
-        placeholder="Search features..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        style={{ padding: '8px', width: '300px', marginBottom: '16px' }}
-      />
+      <div style={{ margin: '16px 0' }}>
+        <input
+          type="text"
+          placeholder="Search features..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ padding: '8px', width: '300px' }}
+        />
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4>Select Layers:</h4>
+        {Object.keys(API_ENDPOINTS).map(layer => (
+          <label key={layer} style={{ marginRight: '12px' }}>
+            <input
+              type="checkbox"
+              checked={selectedLayers.has(layer)}
+              onChange={() => toggleLayer(layer)}
+            />
+            {layer}
+          </label>
+        ))}
+      </div>
 
       <p>Total Features: {totalFeatures}</p>
 
       {loading && <p>Loading data...</p>}
 
       {Object.entries(displayData).map(([layer, features]) => (
-        <div key={layer} style={{ marginBottom: '16px' }}>
-          <h4>{layer.toUpperCase()} ({features.length})</h4>
-          <table border="1" cellPadding="4" cellSpacing="0">
-            <thead>
-              <tr>
-                {features[0] && Object.keys(features[0].properties || {}).map(prop => (
-                  <th key={prop}>{prop}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {features.map((feature, idx) => (
-                <tr key={idx}>
-                  {Object.values(feature.properties || {}).map((val, i) => (
-                    <td key={i}>{val?.toString()}</td>
+        selectedLayers.has(layer) && (
+          <div key={layer} style={{ marginBottom: '16px' }}>
+            <h4>{layer.toUpperCase()} ({features.length})</h4>
+            <table border="1" cellPadding="4" cellSpacing="0">
+              <thead>
+                <tr>
+                  {features[0] && Object.keys(features[0].properties || {}).map(prop => (
+                    <th key={prop}>{prop}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {features.map((feature, idx) => (
+                  <tr key={idx}>
+                    {Object.values(feature.properties || {}).map((val, i) => (
+                      <td key={i}>{val?.toString()}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {failedLayers.has(layer) && <p style={{ color: 'orange' }}>Failed to load some data for this layer.</p>}
+          </div>
+        )
       ))}
 
       <button onClick={() => exportData('csv')} style={{ marginTop: '16px', padding: '8px 12px' }}>Export CSV</button>
