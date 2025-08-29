@@ -1506,15 +1506,182 @@
 // }
 
 // export default DataView;
+
+//Morning 
+// // src/pages/DataView.jsx
+// import React, { useEffect, useState, useMemo } from 'react';
+// import axios from 'axios';
+// import { useAuth } from '../context/AuthContext';
+
+// const availableLayers = [
+//   'buildings', 'roads', 'footpaths', 'vegetation', 'parking',
+//   'solid_waste', 'electricity', 'water_supply', 'drainage',
+//   'security', 'recreational_areas'
+// ];
+
+// const typeOptions = [
+//   { label: 'All', value: 'all' },
+//   { label: 'Building', value: 'building' },
+//   { label: 'Road', value: 'road' },
+//   { label: 'Footpath', value: 'footpath' },
+//   { label: 'Vegetation', value: 'vegetation' },
+//   { label: 'Parking', value: 'parking' },
+//   { label: 'Solid Waste', value: 'solid_waste' },
+//   { label: 'Electricity', value: 'electricity' },
+//   { label: 'Water Supply', value: 'water_supply' },
+//   { label: 'Drainage', value: 'drainage' },
+//   { label: 'Security', value: 'security' },
+//   { label: 'Recreational', value: 'recreational_areas' }
+// ];
+
+// const DataView = ({ layer: initialLayer }) => {
+//   const { token } = useAuth(); // JWT token from context
+//   const [layer, setLayer] = useState(initialLayer || '');
+//   const [data, setData] = useState([]);
+//   const [columns, setColumns] = useState([]);
+//   const [loading, setLoading] = useState(false);
+//   const [page, setPage] = useState(1);
+//   const [totalPages, setTotalPages] = useState(1);
+//   const [limit] = useState(20);
+//   const [elementType, setElementType] = useState('all');
+//   const [searchQuery, setSearchQuery] = useState('');
+
+//   const fetchData = async () => {
+//     if (!layer) return;
+//     setLoading(true);
+
+//     try {
+//       const res = await axios.get(`${import.meta.env.VITE_API_SPATIAL_URL}/geojson/${layer}`, {
+//         headers: { Authorization: `Bearer ${token}` },
+//         params: { page, limit, elementType }
+//       });
+
+//       const features = res.data.features || [];
+
+//       // Set unique columns based on properties keys
+//       const allKeys = new Set();
+//       features.forEach(f => {
+//         if (f.properties) {
+//           Object.keys(f.properties).forEach(k => allKeys.add(k));
+//         }
+//       });
+
+//       setColumns(Array.from(allKeys));
+//       setData(features);
+//       setTotalPages(Math.ceil((res.data.total || features.length) / limit));
+//     } catch (err) {
+//       console.error('[DataView] Fetch Error:', err);
+//       setData([]);
+//       setColumns([]);
+//       setTotalPages(1);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   useEffect(() => {
+//     fetchData();
+//   }, [layer, page, elementType]);
+
+//   const filteredData = useMemo(() => {
+//     if (!searchQuery) return data;
+//     return data.filter(f => 
+//       f.properties && 
+//       Object.values(f.properties).some(val => 
+//         val && val.toString().toLowerCase().includes(searchQuery.toLowerCase())
+//       )
+//     );
+//   }, [data, searchQuery]);
+
+//   const handlePrev = () => setPage(p => Math.max(1, p - 1));
+//   const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
+
+//   return (
+//     <div style={{ padding: '16px' }}>
+//       <h2>Tabular Data for {layer || 'No layer selected'}</h2>
+
+//       {/* Layer Selector */}
+//       <div style={{ margin: '10px 0' }}>
+//         <label>Select Layer: </label>
+//         <select value={layer} onChange={e => { setLayer(e.target.value); setPage(1); }}>
+//           <option value="">--Select Layer--</option>
+//           {availableLayers.map(l => (
+//             <option key={l} value={l}>{l.replace('_', ' ').toUpperCase()}</option>
+//           ))}
+//         </select>
+//       </div>
+
+//       {/* Type Filter */}
+//       {layer && (
+//         <div style={{ margin: '10px 0' }}>
+//           <label>Filter by type: </label>
+//           <select value={elementType} onChange={e => { setElementType(e.target.value); setPage(1); }}>
+//             {typeOptions.map(t => (
+//               <option key={t.value} value={t.value}>{t.label}</option>
+//             ))}
+//           </select>
+//         </div>
+//       )}
+
+//       {/* Search */}
+//       <div style={{ margin: '10px 0' }}>
+//         <input 
+//           type="text" 
+//           placeholder="Search attributes..." 
+//           value={searchQuery} 
+//           onChange={e => setSearchQuery(e.target.value)} 
+//           style={{ padding: '6px', width: '300px' }}
+//         />
+//       </div>
+
+//       {loading ? (
+//         <p>Loading data...</p>
+//       ) : (
+//         <>
+//           <table border="1" cellPadding="5" cellSpacing="0" style={{ width: '100%', marginTop: '10px', borderCollapse: 'collapse' }}>
+//             <thead>
+//               <tr>
+//                 <th>#</th>
+//                 {columns.map(col => <th key={col}>{col.toUpperCase()}</th>)}
+//               </tr>
+//             </thead>
+//             <tbody>
+//               {filteredData.length === 0 ? (
+//                 <tr><td colSpan={columns.length + 1} style={{ textAlign: 'center' }}>No data found</td></tr>
+//               ) : filteredData.map((feature, idx) => (
+//                 <tr key={idx}>
+//                   <td>{(page - 1) * limit + idx + 1}</td>
+//                   {columns.map(col => (
+//                     <td key={col}>{feature.properties ? feature.properties[col] ?? '-' : '-'}</td>
+//                   ))}
+//                 </tr>
+//               ))}
+//             </tbody>
+//           </table>
+
+//           {/* Pagination */}
+//           <div style={{ marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+//             <button onClick={handlePrev} disabled={page <= 1}>Prev</button>
+//             <span>Page {page} of {totalPages}</span>
+//             <button onClick={handleNext} disabled={page >= totalPages}>Next</button>
+//           </div>
+//         </>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default DataView;
+//almost there 
 // src/pages/DataView.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
 const availableLayers = [
   'buildings', 'roads', 'footpaths', 'vegetation', 'parking',
   'solid_waste', 'electricity', 'water_supply', 'drainage',
-  'security', 'recreational_areas'
+  'security', 'recreational_areas', 'vimbweta', 'aru_boundary'
 ];
 
 const typeOptions = [
@@ -1542,54 +1709,48 @@ const DataView = ({ layer: initialLayer }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(20);
   const [elementType, setElementType] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState('');
 
-  const fetchData = async () => {
+  // Fetch data function
+  const fetchData = useCallback(async () => {
     if (!layer) return;
     setLoading(true);
+    setError('');
 
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_SPATIAL_URL}/geojson/${layer}`, {
+      const res = await axios.get(`${import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial'}/data/${layer}`, {
         headers: { Authorization: `Bearer ${token}` },
         params: { page, limit, elementType }
       });
 
-      const features = res.data.features || [];
+      if (res.data.success) {
+        const features = res.data.data || [];
+        setData(features);
 
-      // Set unique columns based on properties keys
-      const allKeys = new Set();
-      features.forEach(f => {
-        if (f.properties) {
-          Object.keys(f.properties).forEach(k => allKeys.add(k));
-        }
-      });
+        // Extract columns dynamically from properties
+        const cols = features.length > 0 ? Object.keys(features[0].properties || {}) : [];
+        setColumns(cols);
 
-      setColumns(Array.from(allKeys));
-      setData(features);
-      setTotalPages(Math.ceil((res.data.total || features.length) / limit));
+        setTotalPages(res.data.pagination?.totalPages || 1);
+      } else {
+        setData([]);
+        setColumns([]);
+        setTotalPages(1);
+      }
     } catch (err) {
       console.error('[DataView] Fetch Error:', err);
+      setError('Failed to fetch data. Check your connection or authentication.');
       setData([]);
       setColumns([]);
       setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  };
+  }, [layer, page, limit, elementType, token]);
 
   useEffect(() => {
     fetchData();
-  }, [layer, page, elementType]);
-
-  const filteredData = useMemo(() => {
-    if (!searchQuery) return data;
-    return data.filter(f => 
-      f.properties && 
-      Object.values(f.properties).some(val => 
-        val && val.toString().toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    );
-  }, [data, searchQuery]);
+  }, [fetchData]);
 
   const handlePrev = () => setPage(p => Math.max(1, p - 1));
   const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
@@ -1621,50 +1782,47 @@ const DataView = ({ layer: initialLayer }) => {
         </div>
       )}
 
-      {/* Search */}
-      <div style={{ margin: '10px 0' }}>
-        <input 
-          type="text" 
-          placeholder="Search attributes..." 
-          value={searchQuery} 
-          onChange={e => setSearchQuery(e.target.value)} 
-          style={{ padding: '6px', width: '300px' }}
-        />
-      </div>
+      {/* Loading & Error */}
+      {loading && <p>Loading data...</p>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      {loading ? (
-        <p>Loading data...</p>
-      ) : (
-        <>
-          <table border="1" cellPadding="5" cellSpacing="0" style={{ width: '100%', marginTop: '10px', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th>#</th>
-                {columns.map(col => <th key={col}>{col.toUpperCase()}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.length === 0 ? (
-                <tr><td colSpan={columns.length + 1} style={{ textAlign: 'center' }}>No data found</td></tr>
-              ) : filteredData.map((feature, idx) => (
-                <tr key={idx}>
-                  <td>{(page - 1) * limit + idx + 1}</td>
-                  {columns.map(col => (
-                    <td key={col}>{feature.properties ? feature.properties[col] ?? '-' : '-'}</td>
-                  ))}
-                </tr>
+      {/* Data Table */}
+      {!loading && data.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
+          <thead>
+            <tr>
+              {columns.map(col => (
+                <th key={col} style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f4f4f4' }}>
+                  {col.replace(/_/g, ' ').toUpperCase()}
+                </th>
               ))}
-            </tbody>
-          </table>
-
-          {/* Pagination */}
-          <div style={{ marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button onClick={handlePrev} disabled={page <= 1}>Prev</button>
-            <span>Page {page} of {totalPages}</span>
-            <button onClick={handleNext} disabled={page >= totalPages}>Next</button>
-          </div>
-        </>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((feature, idx) => (
+              <tr key={idx}>
+                {columns.map(col => (
+                  <td key={col} style={{ border: '1px solid #ddd', padding: '8px' }}>
+                    {feature.properties?.[col] ?? ''}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button onClick={handlePrev} disabled={page === 1}>Prev</button>
+          <span>Page {page} of {totalPages}</span>
+          <button onClick={handleNext} disabled={page === totalPages}>Next</button>
+        </div>
+      )}
+
+      {/* No Data */}
+      {!loading && data.length === 0 && <p>No features available for this layer/type.</p>}
     </div>
   );
 };
