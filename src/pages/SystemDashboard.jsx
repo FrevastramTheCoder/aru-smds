@@ -326,7 +326,244 @@
 // }
 
 // export default SystemDashboard;
-//report
+// //report
+// import React, { useEffect, useState, useCallback } from 'react';
+// import { useNavigate, Link } from 'react-router-dom';
+// import { useAuth } from '../context/AuthContext';
+// import axios from 'axios';
+// import {
+//   Building2,
+//   MapPin,
+//   Footprints,
+//   TreeDeciduous,
+//   Car,
+//   Trash2,
+//   Zap,
+//   Droplet,
+//   Waves,
+//   Fence,
+//   Lightbulb,
+//   Trees,
+//   User,
+//   Map,
+//   Upload,
+//   LogOut,
+//   Sun,
+//   Moon,
+// } from 'lucide-react';
+// import DashboardCard from '../components/DashboardCard';
+
+// // ------------------------
+// // Retry fetch helper
+// // ------------------------
+// const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+//   for (let i = 0; i < maxRetries; i++) {
+//     try {
+//       const controller = new AbortController();
+//       const timeoutId = setTimeout(() => controller.abort(), timeout);
+//       const response = await axios({ ...options, url, signal: controller.signal });
+//       clearTimeout(timeoutId);
+//       return response;
+//     } catch (error) {
+//       if (error.response?.status === 404) throw error;
+//       if (error.response?.status === 429) {
+//         const retryAfter = error.response.headers['retry-after'] || 5;
+//         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+//         continue;
+//       }
+//       if (i === maxRetries - 1) throw error;
+//       await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+//     }
+//   }
+// };
+
+// // ------------------------
+// // Token validation helper
+// // ------------------------
+// const checkTokenValidity = (token) => {
+//   if (!token) return false;
+//   try {
+//     const payload = JSON.parse(atob(token.split('.')[1]));
+//     return payload.exp * 1000 > Date.now();
+//   } catch {
+//     return false;
+//   }
+// };
+
+// // ------------------------
+// // Generate short report for any category
+// // ------------------------
+// const generateShortReport = (category, features) => {
+//   if (!features || features.length === 0) return 'No data available';
+
+//   switch (category) {
+//     case 'Roads':
+//       const good = features.filter(f => f.properties?.condition === 'good').length;
+//       const poor = features.filter(f => f.properties?.condition === 'poor').length;
+//       return `Good: ${good}, Poor: ${poor}`;
+//     case 'Buildings':
+//       const residential = features.filter(f => f.properties?.type === 'residential').length;
+//       const commercial = features.filter(f => f.properties?.type === 'commercial').length;
+//       return `Residential: ${residential}, Commercial: ${commercial}`;
+//     case 'Footpaths':
+//       return `Total footpaths: ${features.length}`;
+//     case 'Vegetation':
+//       return `Total trees/vegetation: ${features.length}`;
+//     case 'Parking':
+//       return `Parking spots: ${features.length}`;
+//     case 'Solid Waste':
+//       return `Waste points: ${features.length}`;
+//     case 'Electricity':
+//       return `Electric poles: ${features.length}`;
+//     case 'Water Supply':
+//       return `Water points: ${features.length}`;
+//     case 'Drainage System':
+//       return `Drainage units: ${features.length}`;
+//     case 'Vimbweta':
+//       return `Fences: ${features.length}`;
+//     case 'Security Lights':
+//       return `Lights: ${features.length}`;
+//     case 'Recreational Areas':
+//       return `Areas: ${features.length}`;
+//     default:
+//       return `${features.length} features`;
+//   }
+// };
+
+// function SystemDashboard() {
+//   const { currentUser, logout } = useAuth();
+//   const navigate = useNavigate();
+//   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
+//   const [loading, setLoading] = useState(true);
+//   const [spatialData, setSpatialData] = useState({});
+//   const [reports, setReports] = useState({});
+
+//   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+
+//   const DASHBOARD_CATEGORIES = [
+//     { key: 'Buildings', icon: Building2, color: '#f87171' },
+//     { key: 'Roads', icon: MapPin, color: '#fbbf24' },
+//     { key: 'Footpaths', icon: Footprints, color: '#4ade80' },
+//     { key: 'Vegetation', icon: TreeDeciduous, color: '#34d399' },
+//     { key: 'Parking', icon: Car, color: '#818cf8' },
+//     { key: 'Solid Waste', icon: Trash2, color: '#a78bfa' },
+//     { key: 'Electricity', icon: Zap, color: '#f472b6' },
+//     { key: 'Water Supply', icon: Droplet, color: '#60a5fa' },
+//     { key: 'Drainage System', icon: Waves, color: '#22d3ee' },
+//     { key: 'Vimbweta', icon: Fence, color: '#facc15' },
+//     { key: 'Security Lights', icon: Lightbulb, color: '#bef264' },
+//     { key: 'Recreational Areas', icon: Trees, color: '#e879f9' },
+//   ];
+
+//   // ------------------------
+//   // Fetch all categories in real-time
+//   // ------------------------
+//   const fetchAllData = useCallback(async () => {
+//     const token = localStorage.getItem('token');
+//     if (!token || !checkTokenValidity(token)) {
+//       navigate('/login');
+//       return;
+//     }
+
+//     const newData = {};
+//     const newReports = {};
+
+//     for (const { key } of DASHBOARD_CATEGORIES) {
+//       const endpoint = `${SPATIAL_API_BASE}/geojson/${key.toLowerCase().replace(/\s+/g, '-')}`;
+//       try {
+//         const res = await fetchWithRetry(endpoint, {
+//           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+//         });
+//         const features = res.data.features || [];
+//         newData[key] = features;
+//         newReports[key] = generateShortReport(key, features);
+//       } catch {
+//         newData[key] = [];
+//         newReports[key] = 'Failed to load';
+//       }
+//     }
+
+//     setSpatialData(newData);
+//     setReports(newReports);
+//   }, [navigate]);
+
+//   useEffect(() => {
+//     document.documentElement.classList.toggle('dark', darkMode);
+//     localStorage.setItem('darkMode', darkMode);
+
+//     setTimeout(() => setLoading(false), 500);
+
+//     // Fetch immediately and poll every 15 seconds
+//     fetchAllData();
+//     const interval = setInterval(fetchAllData, 15000);
+//     return () => clearInterval(interval);
+//   }, [darkMode, fetchAllData]);
+
+//   const handleCategorySelect = (category) => {
+//     const slug = category.toLowerCase().replace(/\s+/g, '-');
+//     navigate(`/map?category=${slug}`);
+//   };
+
+//   const toggleDarkMode = () => setDarkMode(prev => !prev);
+//   const handleLogout = () => { logout(); navigate('/login'); };
+
+//   if (loading) return <div className="loading-spinner"></div>;
+
+//   return (
+//     <div className="system-dashboard">
+//       <div className="circle-blue"></div>
+//       <div className="circle-fuchsia"></div>
+//       <header className="dashboard-header">
+//         <Link to="/" className="flex items-center">
+//           <h1 className="text-xl font-bold">Ardhi Spatial System</h1>
+//         </Link>
+//         <div className="header-buttons">
+//           <div className="flex items-center space-x-2">
+//             <User className="w-4 h-4" />
+//             <span>{currentUser?.username || currentUser?.email}</span>
+//           </div>
+//           <button onClick={() => navigate('/map')} className="flex items-center space-x-1">
+//             <Map className="w-5 h-5" />
+//             <span>Map</span>
+//           </button>
+//           <button onClick={() => navigate('/data')} className="flex items-center space-x-1">
+//             <Upload className="w-5 h-5" />
+//             <span>Data</span>
+//           </button>
+//           <button onClick={handleLogout} className="flex items-center space-x-1">
+//             <LogOut className="w-5 h-5" />
+//             <span>Logout</span>
+//           </button>
+//           <button onClick={toggleDarkMode} className="p-2 rounded-full" aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
+//             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+//           </button>
+//         </div>
+//       </header>
+//       <main className="dashboard-main">
+//         <div className="dashboard-header-text">
+//           <h2>System Dashboard</h2>
+//           <p>Real-time spatial data summary</p>
+//         </div>
+//         <div className="dashboard-grid">
+//           {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
+//             <DashboardCard
+//               key={key}
+//               category={key}
+//               Icon={icon}
+//               color={color}
+//               extraInfo={reports[key]}
+//               onSelect={handleCategorySelect}
+//             />
+//           ))}
+//         </div>
+//       </main>
+//     </div>
+//   );
+// }
+
+// export default SystemDashboard;
+
+//final report
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -353,9 +590,7 @@ import {
 } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
 
-// ------------------------
 // Retry fetch helper
-// ------------------------
 const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -377,9 +612,7 @@ const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => 
   }
 };
 
-// ------------------------
-// Token validation helper
-// ------------------------
+// Token validation
 const checkTokenValidity = (token) => {
   if (!token) return false;
   try {
@@ -390,43 +623,43 @@ const checkTokenValidity = (token) => {
   }
 };
 
-// ------------------------
-// Generate short report for any category
-// ------------------------
+// Generate short report with optional icon for metric
 const generateShortReport = (category, features) => {
-  if (!features || features.length === 0) return 'No data available';
+  if (!features || features.length === 0) return { text: 'No data', icon: null };
 
   switch (category) {
-    case 'Roads':
+    case 'Roads': {
       const good = features.filter(f => f.properties?.condition === 'good').length;
       const poor = features.filter(f => f.properties?.condition === 'poor').length;
-      return `Good: ${good}, Poor: ${poor}`;
-    case 'Buildings':
+      return { text: `Good: ${good} | Poor: ${poor}`, icon: MapPin };
+    }
+    case 'Buildings': {
       const residential = features.filter(f => f.properties?.type === 'residential').length;
       const commercial = features.filter(f => f.properties?.type === 'commercial').length;
-      return `Residential: ${residential}, Commercial: ${commercial}`;
+      return { text: `Residential: ${residential} | Commercial: ${commercial}`, icon: Building2 };
+    }
     case 'Footpaths':
-      return `Total footpaths: ${features.length}`;
+      return { text: `Footpaths: ${features.length}`, icon: Footprints };
     case 'Vegetation':
-      return `Total trees/vegetation: ${features.length}`;
+      return { text: `Trees: ${features.length}`, icon: TreeDeciduous };
     case 'Parking':
-      return `Parking spots: ${features.length}`;
+      return { text: `Spots: ${features.length}`, icon: Car };
     case 'Solid Waste':
-      return `Waste points: ${features.length}`;
+      return { text: `Waste points: ${features.length}`, icon: Trash2 };
     case 'Electricity':
-      return `Electric poles: ${features.length}`;
+      return { text: `Poles: ${features.length}`, icon: Zap };
     case 'Water Supply':
-      return `Water points: ${features.length}`;
+      return { text: `Points: ${features.length}`, icon: Droplet };
     case 'Drainage System':
-      return `Drainage units: ${features.length}`;
+      return { text: `Units: ${features.length}`, icon: Waves };
     case 'Vimbweta':
-      return `Fences: ${features.length}`;
+      return { text: `Fences: ${features.length}`, icon: Fence };
     case 'Security Lights':
-      return `Lights: ${features.length}`;
+      return { text: `Lights: ${features.length}`, icon: Lightbulb };
     case 'Recreational Areas':
-      return `Areas: ${features.length}`;
+      return { text: `Areas: ${features.length}`, icon: Trees };
     default:
-      return `${features.length} features`;
+      return { text: `${features.length} features`, icon: null };
   }
 };
 
@@ -435,8 +668,8 @@ function SystemDashboard() {
   const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
   const [loading, setLoading] = useState(true);
-  const [spatialData, setSpatialData] = useState({});
   const [reports, setReports] = useState({});
+  const [loadingReports, setLoadingReports] = useState({});
 
   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
 
@@ -455,37 +688,32 @@ function SystemDashboard() {
     { key: 'Recreational Areas', icon: Trees, color: '#e879f9' },
   ];
 
-  // ------------------------
-  // Fetch all categories in real-time
-  // ------------------------
-  const fetchAllData = useCallback(async () => {
+  // Fetch per-category data
+  const fetchCategoryData = useCallback(async (categoryKey) => {
     const token = localStorage.getItem('token');
     if (!token || !checkTokenValidity(token)) {
       navigate('/login');
       return;
     }
 
-    const newData = {};
-    const newReports = {};
-
-    for (const { key } of DASHBOARD_CATEGORIES) {
-      const endpoint = `${SPATIAL_API_BASE}/geojson/${key.toLowerCase().replace(/\s+/g, '-')}`;
-      try {
-        const res = await fetchWithRetry(endpoint, {
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-        });
-        const features = res.data.features || [];
-        newData[key] = features;
-        newReports[key] = generateShortReport(key, features);
-      } catch {
-        newData[key] = [];
-        newReports[key] = 'Failed to load';
-      }
+    setLoadingReports(prev => ({ ...prev, [categoryKey]: true }));
+    const endpoint = `${SPATIAL_API_BASE}/geojson/${categoryKey.toLowerCase().replace(/\s+/g, '-')}`;
+    try {
+      const res = await fetchWithRetry(endpoint, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      const features = res.data.features || [];
+      setReports(prev => ({ ...prev, [categoryKey]: generateShortReport(categoryKey, features) }));
+    } catch {
+      setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', icon: null } }));
+    } finally {
+      setLoadingReports(prev => ({ ...prev, [categoryKey]: false }));
     }
-
-    setSpatialData(newData);
-    setReports(newReports);
   }, [navigate]);
+
+  const fetchAllData = useCallback(() => {
+    DASHBOARD_CATEGORIES.forEach(({ key }) => fetchCategoryData(key));
+  }, [fetchCategoryData]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -493,7 +721,6 @@ function SystemDashboard() {
 
     setTimeout(() => setLoading(false), 500);
 
-    // Fetch immediately and poll every 15 seconds
     fetchAllData();
     const interval = setInterval(fetchAllData, 15000);
     return () => clearInterval(interval);
@@ -539,10 +766,11 @@ function SystemDashboard() {
           </button>
         </div>
       </header>
+
       <main className="dashboard-main">
         <div className="dashboard-header-text">
           <h2>System Dashboard</h2>
-          <p>Real-time spatial data summary</p>
+          <p>Real-time spatial data summary with icons</p>
         </div>
         <div className="dashboard-grid">
           {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
@@ -551,7 +779,7 @@ function SystemDashboard() {
               category={key}
               Icon={icon}
               color={color}
-              extraInfo={reports[key]}
+              extraInfo={loadingReports[key] ? { text: 'Loading...', icon: null } : reports[key]}
               onSelect={handleCategorySelect}
             />
           ))}
