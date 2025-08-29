@@ -1674,157 +1674,253 @@
 // export default DataView;
 //almost there 
 // src/pages/DataView.jsx
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
 
-const availableLayers = [
-  'buildings', 'roads', 'footpaths', 'vegetation', 'parking',
-  'solid_waste', 'electricity', 'water_supply', 'drainage',
-  'security', 'recreational_areas', 'vimbweta', 'aru_boundary'
-];
+// ------------------------
+// Debounce helper
+// ------------------------
+function debounce(fn, wait) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
 
-const typeOptions = [
-  { label: 'All', value: 'all' },
-  { label: 'Building', value: 'building' },
-  { label: 'Road', value: 'road' },
-  { label: 'Footpath', value: 'footpath' },
-  { label: 'Vegetation', value: 'vegetation' },
-  { label: 'Parking', value: 'parking' },
-  { label: 'Solid Waste', value: 'solid_waste' },
-  { label: 'Electricity', value: 'electricity' },
-  { label: 'Water Supply', value: 'water_supply' },
-  { label: 'Drainage', value: 'drainage' },
-  { label: 'Security', value: 'security' },
-  { label: 'Recreational', value: 'recreational_areas' }
-];
-
-const DataView = ({ layer: initialLayer }) => {
-  const { token } = useAuth(); // JWT token from context
-  const [layer, setLayer] = useState(initialLayer || '');
-  const [data, setData] = useState([]);
-  const [columns, setColumns] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(20);
-  const [elementType, setElementType] = useState('all');
-  const [error, setError] = useState('');
-
-  // Fetch data function
-  const fetchData = useCallback(async () => {
-    if (!layer) return;
-    setLoading(true);
-    setError('');
-
+// ------------------------
+// Retry fetch helper with exponential backoff
+// ------------------------
+const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+  for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial'}/data/${layer}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { page, limit, elementType }
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const response = await axios({ ...options, url, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      if (error.response?.status === 404) throw error;
+      if (error.response?.status === 429) {
+        const retryAfter = error.response.headers['retry-after'] || 5;
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        continue;
+      }
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+    }
+  }
+};
 
-      if (res.data.success) {
-        const features = res.data.data || [];
-        setData(features);
+// ------------------------
+// Token validation helper
+// ------------------------
+const checkTokenValidity = (token) => {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+};
 
-        // Extract columns dynamically from properties
-        const cols = features.length > 0 ? Object.keys(features[0].properties || {}) : [];
-        setColumns(cols);
+// ------------------------
+// Local storage caching
+// ------------------------
+const useLocalStorageCache = (key, ttl = 3600000) => {
+  const get = useCallback(() => {
+    try {
+      const item = localStorage.getItem(key);
+      if (!item) return null;
+      const { value, timestamp } = JSON.parse(item);
+      if (Date.now() - timestamp > ttl) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return value;
+    } catch {
+      return null;
+    }
+  }, [key, ttl]);
 
-        setTotalPages(res.data.pagination?.totalPages || 1);
-      } else {
-        setData([]);
-        setColumns([]);
-        setTotalPages(1);
+  const set = useCallback((value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify({ value, timestamp: Date.now() }));
+    } catch {}
+  }, [key]);
+
+  return { get, set };
+};
+
+// ------------------------
+// DataView Page
+// ------------------------
+function DataView() {
+  const [spatialData, setSpatialData] = useState({});
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredFeatures, setFilteredFeatures] = useState({});
+  const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
+  const [failedLayers, setFailedLayers] = useState(new Set());
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+  const API_ENDPOINTS = {
+    buildings: `${SPATIAL_API_BASE}/geojson/buildings`,
+    roads: `${SPATIAL_API_BASE}/geojson/roads`,
+    footpaths: `${SPATIAL_API_BASE}/geojson/footpaths`,
+    vegetation: `${SPATIAL_API_BASE}/geojson/vegetation`,
+    parking: `${SPATIAL_API_BASE}/geojson/parking`,
+    solid_waste: `${SPATIAL_API_BASE}/geojson/solid-waste`,
+    electricity: `${SPATIAL_API_BASE}/geojson/electricity`,
+    water_supply: `${SPATIAL_API_BASE}/geojson/water-supply`,
+    drainage: `${SPATIAL_API_BASE}/geojson/drainage`,
+    vimbweta: `${SPATIAL_API_BASE}/geojson/vimbweta`,
+    security: `${SPATIAL_API_BASE}/geojson/security`,
+    recreational_areas: `${SPATIAL_API_BASE}/geojson/recreational-areas`,
+    aru_boundary: `${SPATIAL_API_BASE}/geojson/aru-boundary`
+  };
+
+  const spatialCache = useLocalStorageCache('spatial-data-cache', 86400000);
+  const spatialDataCache = useRef(new Map());
+
+  // Authentication & initial data load
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !checkTokenValidity(token)) {
+      navigate('/login');
+      return;
+    }
+
+    const cachedData = spatialCache.get();
+    if (cachedData) setSpatialData(cachedData);
+
+    const fetchInitialLayers = async () => {
+      setLoading(true);
+      try {
+        const newSpatialData = {};
+        for (const layer of selectedLayers) {
+          try {
+            const resp = await fetchWithRetry(API_ENDPOINTS[layer], {
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            newSpatialData[layer] = resp.data.features || [];
+            spatialDataCache.current.set(layer, newSpatialData[layer]);
+            setFailedLayers(prev => {
+              const setCopy = new Set(prev);
+              setCopy.delete(layer);
+              return setCopy;
+            });
+          } catch {
+            setFailedLayers(prev => new Set([...prev, layer]));
+            newSpatialData[layer] = [];
+          }
+        }
+        setSpatialData(newSpatialData);
+        spatialCache.set(newSpatialData);
+      } catch (err) {
+        setError('Failed to fetch data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialLayers();
+  }, [navigate, selectedLayers]);
+
+  // Search filter
+  useEffect(() => {
+    if (!searchQuery) {
+      setFilteredFeatures({});
+      return;
+    }
+    const filtered = {};
+    Object.entries(spatialData).forEach(([layer, features]) => {
+      filtered[layer] = features.filter(f =>
+        f.properties && Object.values(f.properties).some(v =>
+          v && v.toString().toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      );
+    });
+    setFilteredFeatures(filtered);
+  }, [searchQuery, spatialData]);
+
+  const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+  const totalFeatures = Object.values(displayData).reduce((sum, features) => sum + features.length, 0);
+
+  // Export to CSV
+  const exportData = (format = 'csv') => {
+    try {
+      const dataToExport = displayData;
+      if (format === 'csv') {
+        let csvContent = 'Layer,Feature Count\n';
+        Object.entries(dataToExport).forEach(([layer, features]) => {
+          csvContent += `${layer},${features.length}\n`;
+        });
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `data-export-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       }
     } catch (err) {
-      console.error('[DataView] Fetch Error:', err);
-      setError('Failed to fetch data. Check your connection or authentication.');
-      setData([]);
-      setColumns([]);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
+      setError('Export failed: ' + err.message);
     }
-  }, [layer, page, limit, elementType, token]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const handlePrev = () => setPage(p => Math.max(1, p - 1));
-  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
+  };
 
   return (
     <div style={{ padding: '16px' }}>
-      <h2>Tabular Data for {layer || 'No layer selected'}</h2>
+      <h2>Data View (Tabular)</h2>
+      <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }}>Logout</button>
 
-      {/* Layer Selector */}
-      <div style={{ margin: '10px 0' }}>
-        <label>Select Layer: </label>
-        <select value={layer} onChange={e => { setLayer(e.target.value); setPage(1); }}>
-          <option value="">--Select Layer--</option>
-          {availableLayers.map(l => (
-            <option key={l} value={l}>{l.replace('_', ' ').toUpperCase()}</option>
-          ))}
-        </select>
-      </div>
+      {error && <div style={{ color: 'red', margin: '10px 0' }}>{error}</div>}
 
-      {/* Type Filter */}
-      {layer && (
-        <div style={{ margin: '10px 0' }}>
-          <label>Filter by type: </label>
-          <select value={elementType} onChange={e => { setElementType(e.target.value); setPage(1); }}>
-            {typeOptions.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      <input
+        type="text"
+        placeholder="Search features..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        style={{ padding: '8px', width: '300px', marginBottom: '16px' }}
+      />
 
-      {/* Loading & Error */}
+      <p>Total Features: {totalFeatures}</p>
+
       {loading && <p>Loading data...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      {/* Data Table */}
-      {!loading && data.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
-          <thead>
-            <tr>
-              {columns.map(col => (
-                <th key={col} style={{ border: '1px solid #ddd', padding: '8px', backgroundColor: '#f4f4f4' }}>
-                  {col.replace(/_/g, ' ').toUpperCase()}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((feature, idx) => (
-              <tr key={idx}>
-                {columns.map(col => (
-                  <td key={col} style={{ border: '1px solid #ddd', padding: '8px' }}>
-                    {feature.properties?.[col] ?? ''}
-                  </td>
+      {Object.entries(displayData).map(([layer, features]) => (
+        <div key={layer} style={{ marginBottom: '16px' }}>
+          <h4>{layer.toUpperCase()} ({features.length})</h4>
+          <table border="1" cellPadding="4" cellSpacing="0">
+            <thead>
+              <tr>
+                {features[0] && Object.keys(features[0].properties || {}).map(prop => (
+                  <th key={prop}>{prop}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button onClick={handlePrev} disabled={page === 1}>Prev</button>
-          <span>Page {page} of {totalPages}</span>
-          <button onClick={handleNext} disabled={page === totalPages}>Next</button>
+            </thead>
+            <tbody>
+              {features.map((feature, idx) => (
+                <tr key={idx}>
+                  {Object.values(feature.properties || {}).map((val, i) => (
+                    <td key={i}>{val?.toString()}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+      ))}
 
-      {/* No Data */}
-      {!loading && data.length === 0 && <p>No features available for this layer/type.</p>}
+      <button onClick={() => exportData('csv')} style={{ marginTop: '16px', padding: '8px 12px' }}>Export CSV</button>
     </div>
   );
-};
+}
 
 export default DataView;
