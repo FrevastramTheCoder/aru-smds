@@ -1,5 +1,6 @@
 
 // // export default SystemDashboard;
+// // src/pages/SystemDashboard.jsx
 // import React, { useEffect, useState, useCallback } from "react";
 // import { useNavigate, Link } from "react-router-dom";
 // import { useAuth } from "../context/AuthContext";
@@ -37,31 +38,47 @@
 //   }
 // };
 
+// // 🔹 Generate reports with category-specific logic
 // const generateShortReport = (category, features) => {
-//   if (!features || features.length === 0)
-//     return { text: "No data", badges: [] };
+//   if (!features || features.length === 0) return { text: "No data", badges: [] };
 //   const badges = [];
+
 //   switch (category) {
 //     case "Roads": {
 //       const good = features.filter(f => f.properties?.condition === "good").length;
-//       const poor = features.filter(f => f.properties?.condition === "poor").length;
+//       const bad = features.filter(f => f.properties?.condition === "bad").length;
 //       badges.push({ label: "Good", value: good, color: "#10b981" });
-//       badges.push({ label: "Poor", value: poor, color: "#ef4444" });
+//       badges.push({ label: "Bad", value: bad, color: "#ef4444" });
 //       return { text: "Road conditions", badges };
 //     }
+
 //     case "Buildings": {
-//       const res = features.filter(f => f.properties?.type === "residential").length;
-//       const com = features.filter(f => f.properties?.type === "commercial").length;
-//       badges.push({ label: "Residential", value: res, color: "#3b82f6" });
-//       badges.push({ label: "Commercial", value: com, color: "#facc15" });
-//       return { text: "Building types", badges };
+//       const good = features.filter(f => f.properties?.condition === "good").length;
+//       const fair = features.filter(f => f.properties?.condition === "fair").length;
+//       const bad = features.filter(f => f.properties?.condition === "bad").length;
+//       badges.push({ label: "Good", value: good, color: "#22c55e" });
+//       badges.push({ label: "Fair", value: fair, color: "#eab308" });
+//       badges.push({ label: "Bad", value: bad, color: "#ef4444" });
+//       return { text: "Building conditions", badges };
 //     }
+
+//     case "Parking": {
+//       const good = features.filter(f => f.properties?.condition === "good").length;
+//       const fair = features.filter(f => f.properties?.condition === "fair").length;
+//       const bad = features.filter(f => f.properties?.condition === "bad").length;
+//       badges.push({ label: "Good", value: good, color: "#22c55e" });
+//       badges.push({ label: "Fair", value: fair, color: "#f59e0b" });
+//       badges.push({ label: "Bad", value: bad, color: "#ef4444" });
+//       return { text: "Parking status", badges };
+//     }
+
 //     default:
 //       badges.push({ label: "Count", value: features.length, color: "#818cf8" });
 //       return { text: `${features.length} features`, badges };
 //   }
 // };
 
+// // Fetch helper with retry
 // const fetchWithRetry = async (url, options, retries = 5, delay = 2000) => {
 //   try {
 //     return await axios.get(url, options);
@@ -142,11 +159,8 @@
 //           marginBottom: "24px",
 //         }}
 //       >
-//         <Link
-//           to="/"
-//           style={{ fontSize: "1.5rem", fontWeight: "bold", color: darkMode ? "#fff" : "#111827" }}
-//         >
-//         🌍 AruGIS Dashboard
+//         <Link to="/" style={{ fontSize: "1.5rem", fontWeight: "bold", color: darkMode ? "#fff" : "#111827" }}>
+//           🌍 AruGIS Dashboard
 //         </Link>
 //         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
 //           <User style={{ width: "20px", height: "20px" }} />
@@ -163,10 +177,7 @@
 //             {darkMode ? "☀️ Light" : "🌙 Dark"}
 //           </button>
 //           <button
-//             onClick={() => {
-//               logout();
-//               navigate("/login");
-//             }}
+//             onClick={() => { logout(); navigate("/login"); }}
 //             style={{ padding: "6px 12px", borderRadius: "4px", background: "#ef4444", color: "#fff" }}
 //           >
 //             Logout
@@ -178,7 +189,7 @@
 //       <main
 //         style={{
 //           display: "grid",
-//           gridTemplateColumns: "repeat(4, 1fr)", // ✅ Exactly 4 per row
+//           gridTemplateColumns: "repeat(4, 1fr)", // ✅ fixed 4 per row
 //           gap: "18px",
 //           alignItems: "stretch",
 //         }}
@@ -210,8 +221,10 @@ import {
 } from "lucide-react";
 import DashboardCard from "../components/DashboardCard";
 
+// ✅ API base URL
 const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || "https://smds.onrender.com/api/spatial").replace(/\/$/, "");
 
+// ✅ Categories configuration
 const DASHBOARD_CATEGORIES = [
   { key: "Buildings", icon: Building2, color: "#f87171" },
   { key: "Roads", icon: MapPin, color: "#fbbf24" },
@@ -227,6 +240,7 @@ const DASHBOARD_CATEGORIES = [
   { key: "Recreational Areas", icon: Trees, color: "#e879f9" },
 ];
 
+// ✅ Check token validity
 const checkTokenValidity = (token) => {
   if (!token) return false;
   try {
@@ -237,16 +251,16 @@ const checkTokenValidity = (token) => {
   }
 };
 
-// 🔹 Generate reports with category-specific logic
+// ✅ Report generator
 const generateShortReport = (category, features) => {
   if (!features || features.length === 0) return { text: "No data", badges: [] };
-  const badges = [];
 
+  const badges = [];
   switch (category) {
     case "Roads": {
       const good = features.filter(f => f.properties?.condition === "good").length;
       const bad = features.filter(f => f.properties?.condition === "bad").length;
-      badges.push({ label: "Good", value: good, color: "#10b981" });
+      badges.push({ label: "Good", value: good, color: "#22c55e" });
       badges.push({ label: "Bad", value: bad, color: "#ef4444" });
       return { text: "Road conditions", badges };
     }
@@ -277,7 +291,7 @@ const generateShortReport = (category, features) => {
   }
 };
 
-// Fetch helper with retry
+// ✅ Retry fetch wrapper
 const fetchWithRetry = async (url, options, retries = 5, delay = 2000) => {
   try {
     return await axios.get(url, options);
@@ -298,6 +312,7 @@ function SystemDashboard() {
   const [reports, setReports] = useState({});
   const [loadingReports, setLoadingReports] = useState({});
 
+  // ✅ Fetch category data
   const fetchCategoryData = useCallback(async (categoryKey, delayMs = 0) => {
     const token = localStorage.getItem("token");
     if (!token || !checkTokenValidity(token)) {
@@ -323,6 +338,7 @@ function SystemDashboard() {
     }
   }, [navigate]);
 
+  // ✅ Fetch all categories
   const fetchAllData = useCallback(() => {
     DASHBOARD_CATEGORIES.forEach((c, idx) => fetchCategoryData(c.key, idx * 500));
   }, [fetchCategoryData]);
@@ -331,7 +347,7 @@ function SystemDashboard() {
     document.documentElement.classList.toggle("dark", darkMode);
     localStorage.setItem("darkMode", darkMode);
     fetchAllData();
-    const interval = setInterval(fetchAllData, 30000);
+    const interval = setInterval(fetchAllData, 30000); // refresh every 30s
     return () => clearInterval(interval);
   }, [darkMode, fetchAllData]);
 
