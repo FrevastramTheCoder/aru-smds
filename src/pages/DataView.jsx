@@ -1506,70 +1506,71 @@
 // }
 
 // export default DataView;
-// src/pages/DataView.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const DataView = () => {
+  const { table } = useParams(); // 🔹 dynamic layer e.g. buildings, roads
+  const { user } = useAuth(); // 🔹 must contain JWT token
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Adjust API endpoint to the one returning GeoJSON from DB
-        const res = await axios.get("http://localhost:5000/api/spatial/data"); 
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/spatial/data/${table}`,
+          {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }
+        );
 
-        if (res.data && res.data.features) {
-          // Convert GeoJSON features into tabular rows
-          const features = res.data.features;
-          const cols = Object.keys(features[0].properties || {});
-          setColumns(cols);
-
-          const formattedRows = features.map((f, index) => ({
-            id: index + 1,
-            ...f.properties,
+        if (res.data && res.data.data) {
+          const records = res.data.data.map((d) => ({
+            id: d.id,
+            ...d.attributes, // attributes stored in JSONB column
           }));
 
-          setRows(formattedRows);
-        } else {
-          toast.error("No data found");
+          setRows(records);
+          if (records.length > 0) setColumns(Object.keys(records[0]));
         }
       } catch (err) {
-        console.error(err);
-        toast.error("Failed to fetch data");
+        console.error("Error fetching tabular data:", err);
       }
     };
 
-    fetchData();
-  }, []);
+    if (user && table) {
+      fetchData();
+    }
+  }, [table, user]);
 
   return (
     <div className="p-6">
-      <ToastContainer />
-      <h2 className="text-2xl font-bold mb-4">GeoJSON Data (Table View)</h2>
-      {rows.length > 0 ? (
-        <div className="overflow-x-auto border rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
+      <h2 className="text-xl font-semibold mb-4">
+        Tabular Data for {table}
+      </h2>
+      {rows.length === 0 ? (
+        <p>No data available</p>
+      ) : (
+        <div className="overflow-x-auto border rounded-lg shadow-md">
+          <table className="min-w-full border-collapse">
+            <thead className="bg-gray-200">
               <tr>
-                <th className="px-4 py-2 border">#</th>
-                {columns.map((col) => (
-                  <th key={col} className="px-4 py-2 border">
+                {columns.map((col, idx) => (
+                  <th key={idx} className="border px-4 py-2 text-left">
                     {col}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {rows.map((row, i) => (
                 <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 border">{row.id}</td>
-                  {columns.map((col) => (
-                    <td key={col} className="px-4 py-2 border">
-                      {row[col]}
+                  {columns.map((col, j) => (
+                    <td key={j} className="border px-4 py-2">
+                      {row[col] !== undefined ? row[col].toString() : ""}
                     </td>
                   ))}
                 </tr>
@@ -1577,8 +1578,6 @@ const DataView = () => {
             </tbody>
           </table>
         </div>
-      ) : (
-        <p>No data available</p>
       )}
     </div>
   );
