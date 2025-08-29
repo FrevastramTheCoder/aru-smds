@@ -221,7 +221,8 @@ import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import {
   Building2, MapPin, Footprints, TreeDeciduous, Car, Trash2, Zap,
-  Droplet, Waves, Fence, Lightbulb, Trees, User
+  Droplet, Waves, Fence, Lightbulb, Trees, User, Eye, Activity,
+  CheckSquare, Clipboard, Menu, X
 } from "lucide-react";
 import DashboardCard from "../components/DashboardCard";
 
@@ -258,7 +259,6 @@ const checkTokenValidity = (token) => {
 // ✅ Report generator
 const generateShortReport = (category, features) => {
   if (!features || features.length === 0) return { text: "No data", badges: [] };
-
   const badges = [];
   switch (category) {
     case "Roads": {
@@ -310,10 +310,10 @@ function SystemDashboard() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState(localStorage.getItem("darkMode") === "true");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [reports, setReports] = useState({});
   const [loadingReports, setLoadingReports] = useState({});
 
-  // ✅ Fetch category data
   const fetchCategoryData = useCallback(async (categoryKey, delayMs = 0) => {
     const token = localStorage.getItem("token");
     if (!token || !checkTokenValidity(token)) {
@@ -321,7 +321,6 @@ function SystemDashboard() {
       return;
     }
     await new Promise(r => setTimeout(r, delayMs));
-
     setLoadingReports(prev => ({ ...prev, [categoryKey]: true }));
     try {
       const res = await fetchWithRetry(
@@ -339,7 +338,6 @@ function SystemDashboard() {
     }
   }, [navigate]);
 
-  // ✅ Fetch all categories
   const fetchAllData = useCallback(() => {
     DASHBOARD_CATEGORIES.forEach((c, idx) => fetchCategoryData(c.key, idx * 500));
   }, [fetchCategoryData]);
@@ -348,7 +346,7 @@ function SystemDashboard() {
     document.documentElement.classList.toggle("dark", darkMode);
     localStorage.setItem("darkMode", darkMode);
     fetchAllData();
-    const interval = setInterval(fetchAllData, 30000); // refresh every 30s
+    const interval = setInterval(fetchAllData, 30000);
     return () => clearInterval(interval);
   }, [darkMode, fetchAllData]);
 
@@ -357,64 +355,63 @@ function SystemDashboard() {
   };
 
   return (
-    <div style={{
-      display: "flex",
-      minHeight: "100vh",
-      background: darkMode ? "#111827" : "#f3f4f6",
-      color: darkMode ? "#f9fafb" : "#111827",
-      transition: "0.3s"
-    }}>
-      {/* Left Sidebar */}
-      <aside style={{
-        width: "300px",
-        padding: "24px",
-        background: darkMode ? "#1f2937" : "#e5e7eb",
-        overflowY: "auto"
-      }}>
-        <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "16px" }}>
-          About the System
-        </h2>
-        <p style={{ marginBottom: "16px", lineHeight: "1.5" }}>
-          The Spatial Database System for Space Utilization and Infrastructure Optimization at Ardhi University is a digital platform that integrates campus maps, building layouts, and detailed room information into a centralized, interactive GIS system. It enables administrators, planners, and academic units to:
-        </p>
-        <ul style={{ paddingLeft: "20px", listStyleType: "disc", lineHeight: "1.6" }}>
-          <li>Visualize all campus spaces on an interactive map.</li>
-          <li>Track room usage, occupancy, and conditions in real time.</li>
-          <li>Identify underutilized areas for repurposing or optimization.</li>
-          <li>Perform spatial queries and generate reports for data-driven decisions.</li>
-          <li>Support planning, resource allocation, and policy formulation.</li>
-        </ul>
+    <div className={`flex min-h-screen transition-colors ${darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"}`}>
+
+      {/* Sidebar */}
+      <aside className={`fixed top-0 left-0 h-full z-50 transition-transform transform ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static md:w-80 p-6 ${darkMode ? "bg-gray-800" : "bg-white"} shadow-xl rounded-r-3xl flex flex-col justify-between`}>
+        <div>
+          <div className="flex justify-between items-center mb-4 md:hidden">
+            <h2 className="text-2xl font-bold text-indigo-400">About the System</h2>
+            <button onClick={() => setSidebarOpen(false)}>
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          {sidebarOpen && (
+            <>
+              <h2 className="hidden md:block text-2xl font-bold mb-4 text-indigo-400">About the System</h2>
+              <p className="mb-4 leading-relaxed">
+                The Spatial Database System for Space Utilization and Infrastructure Optimization at Ardhi University integrates campus maps, building layouts, and detailed room information into a centralized, interactive GIS system. It allows administrators, planners, and academic units to:
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2 hover:text-indigo-400 transition-colors"><Eye className="w-5 h-5 text-indigo-300" /> Visualize all campus spaces on an interactive map.</li>
+                <li className="flex items-center gap-2 hover:text-indigo-400 transition-colors"><Activity className="w-5 h-5 text-green-400" /> Track room usage, occupancy, and conditions in real time.</li>
+                <li className="flex items-center gap-2 hover:text-indigo-400 transition-colors"><CheckSquare className="w-5 h-5 text-yellow-400" /> Identify underutilized areas for repurposing or optimization.</li>
+                <li className="flex items-center gap-2 hover:text-indigo-400 transition-colors"><Clipboard className="w-5 h-5 text-blue-400" /> Perform spatial queries and generate reports for data-driven decisions.</li>
+                <li className="flex items-center gap-2 hover:text-indigo-400 transition-colors"><User className="w-5 h-5 text-pink-400" /> Support planning, resource allocation, and policy formulation.</li>
+              </ul>
+            </>
+          )}
+        </div>
+        <div className="mt-6 text-sm text-gray-400 hidden md:block">
+          © Ardhi University
+        </div>
       </aside>
 
-      {/* Right Content */}
-      <div style={{ flex: 1, padding: "24px" }}>
+      {/* Main Content */}
+      <div className="flex-1 p-6 md:ml-80">
+        {/* Mobile toggle button */}
+        <button
+          className="md:hidden mb-4 px-3 py-1 rounded bg-indigo-600 text-white flex items-center gap-1"
+          onClick={() => setSidebarOpen(true)}
+        >
+          <Menu className="w-5 h-5" /> Menu
+        </button>
+
         {/* Header */}
-        <header style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "24px",
-        }}>
-          <Link to="/" style={{ fontSize: "1.5rem", fontWeight: "bold", color: darkMode ? "#fff" : "#111827" }}>
-            🌍 AruGIS Dashboard
-          </Link>
-          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <User style={{ width: "20px", height: "20px" }} />
+        <header className="flex justify-between items-center mb-6">
+          <Link className="text-2xl font-bold" to="/">🌍 AruGIS Dashboard</Link>
+          <div className="flex items-center gap-3">
+            <User className="w-5 h-5" />
             <span>{currentUser?.username || currentUser?.email}</span>
             <button
               onClick={() => setDarkMode(prev => !prev)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "4px",
-                background: darkMode ? "#f9fafb" : "#1f2937",
-                color: darkMode ? "#111827" : "#f9fafb",
-              }}
+              className={`px-3 py-1 rounded ${darkMode ? "bg-gray-200 text-gray-900" : "bg-gray-800 text-gray-100"}`}
             >
               {darkMode ? "☀️ Light" : "🌙 Dark"}
             </button>
             <button
               onClick={() => { logout(); navigate("/login"); }}
-              style={{ padding: "6px 12px", borderRadius: "4px", background: "#ef4444", color: "#fff" }}
+              className="px-3 py-1 rounded bg-red-600 text-white"
             >
               Logout
             </button>
@@ -422,12 +419,7 @@ function SystemDashboard() {
         </header>
 
         {/* Dashboard Grid */}
-        <main style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-          gap: "18px",
-          alignItems: "stretch",
-        }}>
+        <main className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
             <DashboardCard
               key={key}
