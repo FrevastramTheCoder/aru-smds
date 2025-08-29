@@ -1506,79 +1506,70 @@
 // }
 
 // export default DataView;
+// src/pages/DataView.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const DataView = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [tableData, setTableData] = useState([]);
+  const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
 
   useEffect(() => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-
     const fetchData = async () => {
       try {
-        // 🔹 Replace with your API endpoint that returns GeoJSON
-        const res = await axios.get("http://localhost:5000/api/spatial/data", {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
+        // Adjust API endpoint to the one returning GeoJSON from DB
+        const res = await axios.get("http://localhost:5000/api/spatial/data"); 
 
         if (res.data && res.data.features) {
+          // Convert GeoJSON features into tabular rows
           const features = res.data.features;
+          const cols = Object.keys(features[0].properties || {});
+          setColumns(cols);
 
-          // Extract all properties (ignoring geometry)
-          const rows = features.map((f) => f.properties || {});
-          setTableData(rows);
+          const formattedRows = features.map((f, index) => ({
+            id: index + 1,
+            ...f.properties,
+          }));
 
-          // Get all unique property keys as columns
-          const allKeys = new Set();
-          rows.forEach((row) => Object.keys(row).forEach((k) => allKeys.add(k)));
-          setColumns(Array.from(allKeys));
+          setRows(formattedRows);
+        } else {
+          toast.error("No data found");
         }
       } catch (err) {
-        console.error("Error fetching GeoJSON:", err);
+        console.error(err);
+        toast.error("Failed to fetch data");
       }
     };
 
     fetchData();
-  }, [user, navigate]);
+  }, []);
 
   return (
     <div className="p-6">
-      <h2 className="text-xl font-semibold mb-4">GeoJSON Data Table</h2>
-      {tableData.length === 0 ? (
-        <p>No data available</p>
-      ) : (
-        <div className="overflow-x-auto border rounded-lg shadow-md">
-          <table className="min-w-full border-collapse">
-            <thead className="bg-gray-200">
+      <ToastContainer />
+      <h2 className="text-2xl font-bold mb-4">GeoJSON Data (Table View)</h2>
+      {rows.length > 0 ? (
+        <div className="overflow-x-auto border rounded-lg">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-100">
               <tr>
-                {columns.map((col, idx) => (
-                  <th
-                    key={idx}
-                    className="border px-4 py-2 text-left text-sm font-medium text-gray-700"
-                  >
+                <th className="px-4 py-2 border">#</th>
+                {columns.map((col) => (
+                  <th key={col} className="px-4 py-2 border">
                     {col}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {tableData.map((row, rowIndex) => (
-                <tr key={rowIndex} className="hover:bg-gray-50">
-                  {columns.map((col, colIndex) => (
-                    <td
-                      key={colIndex}
-                      className="border px-4 py-2 text-sm text-gray-600"
-                    >
-                      {row[col] !== undefined ? row[col].toString() : ""}
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 border">{row.id}</td>
+                  {columns.map((col) => (
+                    <td key={col} className="px-4 py-2 border">
+                      {row[col]}
                     </td>
                   ))}
                 </tr>
@@ -1586,6 +1577,8 @@ const DataView = () => {
             </tbody>
           </table>
         </div>
+      ) : (
+        <p>No data available</p>
       )}
     </div>
   );
