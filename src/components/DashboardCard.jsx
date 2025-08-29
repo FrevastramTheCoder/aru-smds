@@ -291,23 +291,31 @@
 
 //final codes
 // src/components/DashboardCard.jsx
-import React, { useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { motion } from 'framer-motion';
-import { Sparklines, SparklinesBars } from 'react-sparklines';
+import { Sparklines, SparklinesLine } from 'react-sparklines';
 
 function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
+  const [hover, setHover] = useState(false);
+  const [sparkData, setSparkData] = useState([]);
+
+  // Update sparkline in real-time
+  useEffect(() => {
+    if (extraInfo?.badges) {
+      const total = extraInfo.badges.reduce((sum, b) => sum + b.value, 0);
+      setSparkData(prev => [...prev.slice(-9), total]);
+    }
+  }, [extraInfo]);
+
   const handleKeyDown = useCallback(
     (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        onSelect(category);
-      }
+      if (e.key === 'Enter' || e.key === ' ') onSelect(category);
     },
     [category, onSelect]
   );
 
   const total = extraInfo?.badges?.reduce((sum, b) => sum + b.value, 0) || 0;
-  const sparkData = extraInfo?.badges?.map(b => b.value) || [];
 
   return (
     <motion.div
@@ -319,63 +327,92 @@ function DashboardCard({ category, Icon, color, onSelect, extraInfo }) {
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      className="dashboard-card"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        background: '#fff',
+        background: '#1f2937',
+        color: '#f9fafb',
         borderRadius: '12px',
         padding: '16px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+        boxShadow: hover ? '0 8px 20px rgba(0,0,0,0.5)' : '0 4px 12px rgba(0,0,0,0.3)',
         cursor: 'pointer',
-        transition: 'transform 0.2s ease',
+        transition: 'all 0.2s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+        minHeight: '200px',
       }}
-      whileHover={{ scale: 1.03 }}
     >
-      {/* Icon with tooltip */}
-      <div className="tooltip">
-        <div className="dashboard-card-icon" style={{ backgroundColor: color, borderRadius: '8px', padding: '8px', display: 'inline-flex' }}>
-          <Icon className="icon" />
+      {/* Tooltip */}
+      {hover && extraInfo?.text && (
+        <div style={{
+          position: 'absolute',
+          top: '-48px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#111827',
+          color: '#f9fafb',
+          padding: '6px 12px',
+          borderRadius: '6px',
+          fontSize: '0.75rem',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+          zIndex: 10,
+        }}>
+          {extraInfo.text}
         </div>
-        <span className="tooltip-text">View {category} data</span>
-      </div>
-
-      {/* Title */}
-      <h3 className="dashboard-card-title" style={{ marginTop: '8px' }}>{category}</h3>
-
-      {/* Extra info */}
-      {extraInfo && total > 0 && (
-        <>
-          {/* Badges with bars */}
-          <div style={{ marginTop: '8px' }}>
-            {extraInfo.badges.map((badge, idx) => {
-              const widthPercent = total ? (badge.value / total) * 100 : 0;
-              return (
-                <div key={idx} style={{ marginBottom: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '2px' }}>
-                    <span>{badge.label}</span>
-                    <span>{badge.value}</span>
-                  </div>
-                  <div style={{ background: '#e5e7eb', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                    <div style={{ width: `${widthPercent}%`, backgroundColor: badge.color, height: '100%' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Mini sparkline bar chart */}
-          <div style={{ marginTop: '8px' }}>
-            <Sparklines data={sparkData} limit={10} width={100} height={20}>
-              <SparklinesBars style={{ fill: color }} />
-            </Sparklines>
-          </div>
-        </>
       )}
 
-      {/* Text summary */}
-      {extraInfo && extraInfo.text && (
-        <p style={{ marginTop: '8px', fontSize: '0.8rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          {extraInfo.icon && <extraInfo.icon className="w-4 h-4" />}
-          <span>{extraInfo.text}</span>
+      {/* Icon */}
+      <div style={{
+        backgroundColor: color,
+        borderRadius: '8px',
+        padding: '12px',
+        width: '48px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: '12px'
+      }}>
+        <Icon style={{ width: '24px', height: '24px', color: '#fff' }} />
+      </div>
+
+      {/* Category Title */}
+      <h3 style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '8px' }}>{category}</h3>
+
+      {/* Badges */}
+      {total > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          {extraInfo.badges.map((badge, idx) => {
+            const widthPercent = total ? (badge.value / total) * 100 : 0;
+            return (
+              <div key={idx} style={{ marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '2px' }}>
+                  <span>{badge.label}</span>
+                  <span>{badge.value}</span>
+                </div>
+                <div style={{ background: '#374151', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                  <div style={{ width: `${widthPercent}%`, backgroundColor: badge.color, height: '100%', transition: 'width 0.5s' }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Mini Line Sparkline */}
+      {sparkData.length > 0 && (
+        <div style={{ marginBottom: '8px' }}>
+          <Sparklines data={sparkData} limit={10} width={100} height={30}>
+            <SparklinesLine style={{ stroke: color, fill: 'rgba(0,0,0,0.1)' }} />
+          </Sparklines>
+        </div>
+      )}
+
+      {/* Extra Text */}
+      {extraInfo?.text && (
+        <p style={{ fontSize: '0.75rem', color: '#d1d5db', marginTop: 'auto' }}>
+          {extraInfo.text}
         </p>
       )}
     </motion.div>
@@ -389,7 +426,6 @@ DashboardCard.propTypes = {
   onSelect: PropTypes.func.isRequired,
   extraInfo: PropTypes.shape({
     text: PropTypes.string,
-    icon: PropTypes.elementType,
     badges: PropTypes.arrayOf(
       PropTypes.shape({
         label: PropTypes.string.isRequired,

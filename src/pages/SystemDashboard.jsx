@@ -792,6 +792,7 @@
 // export default SystemDashboard;
 
 //final codes
+
 // src/pages/SystemDashboard.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -799,166 +800,120 @@ import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import {
   Building2, MapPin, Footprints, TreeDeciduous, Car, Trash2, Zap,
-  Droplet, Waves, Fence, Lightbulb, Trees, User, Map, Upload,
-  LogOut, Sun, Moon
+  Droplet, Waves, Fence, Lightbulb, Trees
 } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
 
-// Retry fetch helper
-const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      const response = await axios({ ...options, url, signal: controller.signal });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      if (error.response?.status === 404) throw error;
-      if (error.response?.status === 429) {
-        const retryAfter = error.response.headers['retry-after'] || 5;
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        continue;
-      }
-      if (i === maxRetries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
-    }
-  }
-};
+const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
 
-// Token validation
+const DASHBOARD_CATEGORIES = [
+  { key: 'Buildings', icon: Building2, color: '#f87171' },
+  { key: 'Roads', icon: MapPin, color: '#fbbf24' },
+  { key: 'Footpaths', icon: Footprints, color: '#4ade80' },
+  { key: 'Vegetation', icon: TreeDeciduous, color: '#34d399' },
+  { key: 'Parking', icon: Car, color: '#818cf8' },
+  { key: 'Solid Waste', icon: Trash2, color: '#a78bfa' },
+  { key: 'Electricity', icon: Zap, color: '#f472b6' },
+  { key: 'Water Supply', icon: Droplet, color: '#60a5fa' },
+  { key: 'Drainage System', icon: Waves, color: '#22d3ee' },
+  { key: 'Vimbweta', icon: Fence, color: '#facc15' },
+  { key: 'Security Lights', icon: Lightbulb, color: '#bef264' },
+  { key: 'Recreational Areas', icon: Trees, color: '#e879f9' },
+];
+
 const checkTokenValidity = (token) => {
   if (!token) return false;
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
     return payload.exp * 1000 > Date.now();
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 };
 
-// Generate short report with badges
 const generateShortReport = (category, features) => {
-  if (!features || features.length === 0) return { text: 'No data', icon: null, badges: [] };
-
+  if (!features || features.length === 0) return { text: 'No data', badges: [] };
   const badges = [];
   switch (category) {
     case 'Roads': {
       const good = features.filter(f => f.properties?.condition === 'good').length;
       const poor = features.filter(f => f.properties?.condition === 'poor').length;
-      badges.push({ label: 'Good', value: good, color: '#34d399' });
-      badges.push({ label: 'Poor', value: poor, color: '#f87171' });
-      return { text: 'Road condition summary', icon: MapPin, badges };
+      badges.push({ label: 'Good', value: good, color: '#10b981' });
+      badges.push({ label: 'Poor', value: poor, color: '#ef4444' });
+      return { text: 'Road conditions', badges };
     }
     case 'Buildings': {
-      const residential = features.filter(f => f.properties?.type === 'residential').length;
-      const commercial = features.filter(f => f.properties?.type === 'commercial').length;
-      badges.push({ label: 'Residential', value: residential, color: '#60a5fa' });
-      badges.push({ label: 'Commercial', value: commercial, color: '#fbbf24' });
-      return { text: 'Building type summary', icon: Building2, badges };
+      const res = features.filter(f => f.properties?.type === 'residential').length;
+      const com = features.filter(f => f.properties?.type === 'commercial').length;
+      badges.push({ label: 'Residential', value: res, color: '#3b82f6' });
+      badges.push({ label: 'Commercial', value: com, color: '#facc15' });
+      return { text: 'Building types', badges };
     }
     default:
       badges.push({ label: 'Count', value: features.length, color: '#818cf8' });
-      return { text: `${features.length} features`, icon: null, badges };
+      return { text: `${features.length} features`, badges };
   }
 };
 
 function SystemDashboard() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
-  const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
-  const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(true);
   const [reports, setReports] = useState({});
   const [loadingReports, setLoadingReports] = useState({});
 
-  const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
-
-  const DASHBOARD_CATEGORIES = [
-    { key: 'Buildings', icon: Building2, color: '#f87171' },
-    { key: 'Roads', icon: MapPin, color: '#fbbf24' },
-    { key: 'Footpaths', icon: Footprints, color: '#4ade80' },
-    { key: 'Vegetation', icon: TreeDeciduous, color: '#34d399' },
-    { key: 'Parking', icon: Car, color: '#818cf8' },
-    { key: 'Solid Waste', icon: Trash2, color: '#a78bfa' },
-    { key: 'Electricity', icon: Zap, color: '#f472b6' },
-    { key: 'Water Supply', icon: Droplet, color: '#60a5fa' },
-    { key: 'Drainage System', icon: Waves, color: '#22d3ee' },
-    { key: 'Vimbweta', icon: Fence, color: '#facc15' },
-    { key: 'Security Lights', icon: Lightbulb, color: '#bef264' },
-    { key: 'Recreational Areas', icon: Trees, color: '#e879f9' },
-  ];
-
-  // Fetch per-category data
   const fetchCategoryData = useCallback(async (categoryKey) => {
     const token = localStorage.getItem('token');
-    if (!token || !checkTokenValidity(token)) {
-      navigate('/login');
-      return;
-    }
-
+    if (!token || !checkTokenValidity(token)) { navigate('/login'); return; }
     setLoadingReports(prev => ({ ...prev, [categoryKey]: true }));
-    const endpoint = `${SPATIAL_API_BASE}/geojson/${categoryKey.toLowerCase().replace(/\s+/g, '-')}`;
     try {
-      const res = await fetchWithRetry(endpoint, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      const res = await axios.get(`${SPATIAL_API_BASE}/geojson/${categoryKey.toLowerCase().replace(/\s+/g, '-')}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       const features = res.data.features || [];
       setReports(prev => ({ ...prev, [categoryKey]: generateShortReport(categoryKey, features) }));
     } catch {
-      setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', icon: null, badges: [] } }));
+      setReports(prev => ({ ...prev, [categoryKey]: { text: 'Failed to load', badges: [] } }));
     } finally {
       setLoadingReports(prev => ({ ...prev, [categoryKey]: false }));
     }
   }, [navigate]);
 
-  const fetchAllData = useCallback(() => {
-    DASHBOARD_CATEGORIES.forEach(({ key }) => fetchCategoryData(key));
-  }, [fetchCategoryData]);
+  const fetchAllData = useCallback(() => DASHBOARD_CATEGORIES.forEach(c => fetchCategoryData(c.key)), [fetchCategoryData]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('darkMode', darkMode);
-
-    setTimeout(() => setLoading(false), 500);
-
     fetchAllData();
-    const interval = setInterval(fetchAllData, 15000);
+    const interval = setInterval(fetchAllData, 15000); // 15s refresh
     return () => clearInterval(interval);
-  }, [darkMode, fetchAllData]);
+  }, [fetchAllData]);
 
   const handleCategorySelect = (category) => {
     const slug = category.toLowerCase().replace(/\s+/g, '-');
     navigate(`/map?category=${slug}`);
   };
 
-  const toggleDarkMode = () => setDarkMode(prev => !prev);
   const handleLogout = () => { logout(); navigate('/login'); };
-
-  if (loading) return <div style={{ padding: '24px' }}>Loading dashboard...</div>;
+  const toggleDarkMode = () => setDarkMode(prev => !prev);
 
   return (
-    <div style={{ padding: '24px', minHeight: '100vh', background: darkMode ? '#111827' : '#f9fafb' }}>
+    <div style={{ padding: '24px', minHeight: '100vh', background: darkMode ? '#111827' : '#f3f4f6', color: darkMode ? '#f9fafb' : '#111827' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <Link to="/" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: darkMode ? '#fff' : '#111827' }}>Ardhi Spatial System</Link>
+        <Link to="/" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: darkMode ? '#fff' : '#111827' }}>ArcGIS Pro Dashboard</Link>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <span style={{ color: darkMode ? '#fff' : '#111827' }}>{currentUser?.username || currentUser?.email}</span>
-          <button onClick={toggleDarkMode}>{darkMode ? '☀️ Light' : '🌙 Dark'}</button>
-          <button onClick={handleLogout}>Logout</button>
+          <span>{currentUser?.username || currentUser?.email}</span>
+          <button onClick={toggleDarkMode} style={{ padding: '6px 12px', borderRadius: '4px', background: darkMode ? '#f9fafb' : '#1f2937', color: darkMode ? '#111827' : '#f9fafb' }}>
+            {darkMode ? '☀️ Light' : '🌙 Dark'}
+          </button>
+          <button onClick={handleLogout} style={{ padding: '6px 12px', borderRadius: '4px', background: '#ef4444', color: '#fff' }}>Logout</button>
         </div>
       </header>
 
-      <main style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-        gap: '16px'
-      }}>
+      <main style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
         {DASHBOARD_CATEGORIES.map(({ key, icon, color }) => (
           <DashboardCard
             key={key}
             category={key}
             Icon={icon}
             color={color}
-            extraInfo={loadingReports[key] ? { text: 'Loading...', icon: null, badges: [] } : reports[key]}
+            extraInfo={loadingReports[key] ? { text: 'Loading...', badges: [] } : reports[key]}
             onSelect={handleCategorySelect}
           />
         ))}
