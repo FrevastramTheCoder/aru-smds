@@ -1511,8 +1511,30 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const DataView = ({ layer }) => {
-  const { token } = useAuth(); // Assuming your AuthContext provides JWT token
+const availableLayers = [
+  'buildings', 'roads', 'footpaths', 'vegetation', 'parking',
+  'solid_waste', 'electricity', 'water_supply', 'drainage',
+  'security', 'recreational_areas'
+];
+
+const typeOptions = [
+  { label: 'All', value: 'all' },
+  { label: 'Building', value: 'building' },
+  { label: 'Road', value: 'road' },
+  { label: 'Footpath', value: 'footpath' },
+  { label: 'Vegetation', value: 'vegetation' },
+  { label: 'Parking', value: 'parking' },
+  { label: 'Solid Waste', value: 'solid_waste' },
+  { label: 'Electricity', value: 'electricity' },
+  { label: 'Water Supply', value: 'water_supply' },
+  { label: 'Drainage', value: 'drainage' },
+  { label: 'Security', value: 'security' },
+  { label: 'Recreational', value: 'recreational_areas' }
+];
+
+const DataView = ({ layer: initialLayer }) => {
+  const { token } = useAuth(); // JWT token from context
+  const [layer, setLayer] = useState(initialLayer || '');
   const [data, setData] = useState([]);
   const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1557,26 +1579,33 @@ const DataView = ({ layer }) => {
     <div>
       <h2>Tabular Data for {layer || 'No layer selected'}</h2>
 
+      {/* Layer selector */}
       <div style={{ margin: '10px 0' }}>
-        <label>Filter by type: </label>
-        <select value={elementType} onChange={e => setElementType(e.target.value)}>
-          <option value="all">All</option>
-          <option value="building">Building</option>
-          <option value="road">Road</option>
-          <option value="footpath">Footpath</option>
-          <option value="vegetation">Vegetation</option>
-          <option value="parking">Parking</option>
-          <option value="solid_waste">Solid Waste</option>
-          <option value="electricity">Electricity</option>
-          <option value="water_supply">Water Supply</option>
-          <option value="drainage">Drainage</option>
-          <option value="security">Security</option>
-          <option value="recreational_areas">Recreational</option>
+        <label>Select Layer: </label>
+        <select value={layer} onChange={e => { setLayer(e.target.value); setPage(1); }}>
+          <option value="">--Select Layer--</option>
+          {availableLayers.map(l => (
+            <option key={l} value={l}>{l.replace('_', ' ').toUpperCase()}</option>
+          ))}
         </select>
       </div>
 
+      {/* Type filter */}
+      {layer && (
+        <div style={{ margin: '10px 0' }}>
+          <label>Filter by type: </label>
+          <select value={elementType} onChange={e => { setElementType(e.target.value); setPage(1); }}>
+            {typeOptions.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <p>Loading...</p>
+      ) : !layer ? (
+        <p>Please select a layer to view data.</p>
       ) : data.length === 0 ? (
         <p>No data available</p>
       ) : (
@@ -1597,26 +1626,27 @@ const DataView = ({ layer }) => {
                     <td key={col}>{row.attributes[col] ?? '-'}</td>
                   ) : null
                 )}
-                <td>
-                  {row.geometry ? JSON.stringify(row.geometry) : '-'}
-                </td>
+                <td>{row.geometry ? JSON.stringify(row.geometry) : '-'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
 
-      <div style={{ marginTop: '10px' }}>
-        <button onClick={handlePrev} disabled={page === 1}>
-          Prev
-        </button>
-        <span style={{ margin: '0 10px' }}>
-          Page {page} of {totalPages}
-        </span>
-        <button onClick={handleNext} disabled={page === totalPages}>
-          Next
-        </button>
-      </div>
+      {/* Pagination */}
+      {layer && data.length > 0 && (
+        <div style={{ marginTop: '10px' }}>
+          <button onClick={handlePrev} disabled={page === 1}>
+            Prev
+          </button>
+          <span style={{ margin: '0 10px' }}>
+            Page {page} of {totalPages}
+          </span>
+          <button onClick={handleNext} disabled={page === totalPages}>
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 };
