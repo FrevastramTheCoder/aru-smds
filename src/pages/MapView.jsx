@@ -7128,11 +7128,919 @@
 
 // export default MapView;
 
+// import React, { useState, useEffect, useCallback, useRef } from 'react';
+// import { useLocation, useNavigate } from 'react-router-dom';
+// import { MapContainer, TileLayer, LayersControl, GeoJSON } from 'react-leaflet';
+// import L from 'leaflet';
+// import axios from 'axios';
+// import 'leaflet/dist/leaflet.css';
+// import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
+// import { Bar } from 'react-chartjs-2';
+
+// // Register Chart.js components
+// ChartJS.register(BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend);
+
+// // Fix for default markers in react-leaflet
+// delete L.Icon.Default.prototype._getIconUrl;
+// L.Icon.Default.mergeOptions({
+//   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+//   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+//   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+// });
+
+// // Debounce helper
+// function debounce(fn, wait) {
+//   let t;
+//   return (...args) => {
+//     clearTimeout(t);
+//     t = setTimeout(() => fn(...args), wait);
+//   };
+// }
+
+// // Retry fetch helper with exponential backoff
+// const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+//   for (let i = 0; i < maxRetries; i++) {
+//     try {
+//       const controller = new AbortController();
+//       const timeoutId = setTimeout(() => controller.abort(), timeout);
+//       const response = await axios({
+//         ...options,
+//         url,
+//         signal: controller.signal,
+//       });
+//       clearTimeout(timeoutId);
+//       return response;
+//     } catch (error) {
+//       if (error.response?.status === 404) {
+//         console.warn(`Resource not found: ${url}`);
+//         throw error;
+//       }
+//       if (error.response?.status === 429) {
+//         const retryAfter = error.response.headers['retry-after'] || 5;
+//         console.warn(`Rate limited. Retrying after ${retryAfter} seconds...`);
+//         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+//         continue;
+//       }
+//       if (i === maxRetries - 1) throw error;
+//       console.warn(`Attempt ${i + 1} failed, retrying...`);
+//       await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+//     }
+//   }
+// };
+
+// // Token validation helper
+// const checkTokenValidity = (token) => {
+//   if (!token) return false;
+//   try {
+//     const payload = JSON.parse(atob(token.split('.')[1]));
+//     return payload.exp * 1000 >= Date.now();
+//   } catch {
+//     return false;
+//   }
+// };
+
+// // Role-based permission check
+// const checkUserRole = (token, requiredRole) => {
+//   try {
+//     const payload = JSON.parse(atob(token.split('.')[1]));
+//     return payload.role === requiredRole || (requiredRole === 'Planner' && payload.role === 'Admin');
+//   } catch {
+//     return false;
+//   }
+// };
+
+// // Local storage cache helper
+// const useLocalStorageCache = (key, ttl = 3600000) => {
+//   const get = useCallback(() => {
+//     try {
+//       const item = localStorage.getItem(key);
+//       if (!item) return null;
+//       const { value, timestamp } = JSON.parse(item);
+//       if (Date.now() - timestamp > ttl) {
+//         localStorage.removeItem(key);
+//         return null;
+//       }
+//       return value;
+//     } catch {
+//       return null;
+//     }
+//   }, [key, ttl]);
+
+//   const set = useCallback((value) => {
+//     try {
+//       localStorage.setItem(key, JSON.stringify({
+//         value,
+//         timestamp: Date.now()
+//       }));
+//     } catch (error) {
+//       console.warn('Could not save to localStorage:', error);
+//     }
+//   }, [key]);
+
+//   return { get, set };
+// };
+
+// // Ensure proper polygon winding order
+// const ensurePolygonWindingOrder = (feature) => {
+//   if (!feature.geometry || feature.geometry.type !== 'Polygon') return feature;
+  
+//   try {
+//     const coordinates = feature.geometry.coordinates;
+//     if (coordinates.length > 0 && coordinates[0].length >= 3) {
+//       const area = calculatePolygonArea(coordinates[0]);
+//       if (area > 0) {
+//         coordinates[0] = coordinates[0].reverse();
+//       }
+//     }
+    
+//     for (let i = 1; i < coordinates.length; i++) {
+//       if (coordinates[i].length >= 3) {
+//         const area = calculatePolygonArea(coordinates[i]);
+//         if (area < 0) {
+//           coordinates[i] = coordinates[i].reverse();
+//         }
+//       }
+//     }
+    
+//     return {
+//       ...feature,
+//       geometry: {
+//         ...feature.geometry,
+//         coordinates: coordinates
+//       }
+//     };
+//   } catch (error) {
+//     console.warn('Error processing polygon winding order:', error);
+//     return feature;
+//   }
+// };
+
+// const calculatePolygonArea = (coordinates) => {
+//   let area = 0;
+//   const n = coordinates.length;
+  
+//   for (let i = 0; i < n; i++) {
+//     const j = (i + 1) % n;
+//     area += coordinates[i][0] * coordinates[j][1];
+//     area -= coordinates[j][0] * coordinates[i][1];
+//   }
+  
+//   return area / 2;
+// };
+
+// const MapView = () => {
+//   const [spatialData, setSpatialData] = useState({});
+//   const [selectedType, setSelectedType] = useState('buildings');
+//   const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
+//   const [selectedBaseLayer, setSelectedBaseLayer] = useState('openstreetmap');
+//   const [collapsedSections, setCollapsedSections] = useState({
+//     layers: true,
+//     landbase: true,
+//     base: true,
+//     weather: true,
+//     legend: true,
+//     query: true,
+//     dashboard: true,
+//     feedback: true,
+//   });
+//   const [searchQuery, setSearchQuery] = useState('');
+//   const [error, setError] = useState('');
+//   const [loading, setLoading] = useState(false);
+//   const [loadingLayers, setLoadingLayers] = useState(new Set());
+//   const [failedLayers, setFailedLayers] = useState(new Set());
+//   const [availableEndpoints, setAvailableEndpoints] = useState({});
+//   const [customColors, setCustomColors] = useState({});
+//   const [filteredFeatures, setFilteredFeatures] = useState({});
+//   const [exportProgress, setExportProgress] = useState(0);
+//   const [isExporting, setIsExporting] = useState(false);
+//   const [mapStats, setMapStats] = useState({});
+//   const [showFilters, setShowFilters] = useState(false);
+//   const [activeFilters, setActiveFilters] = useState({});
+//   const [selectedFeature, setSelectedFeature] = useState(null);
+//   const [endpointValidationDone, setEndpointValidationDone] = useState(false);
+//   const [queryParams, setQueryParams] = useState({ attribute: '', operator: 'equals', value: '' });
+//   const [feedbackForm, setFeedbackForm] = useState({ roomId: '', comment: '', issueType: '' });
+//   const [userRole, setUserRole] = useState(null);
+
+//   const navigate = useNavigate();
+//   const location = useLocation();
+//   const spatialCache = useLocalStorageCache('spatial-data-cache', 86400000);
+//   const colorCache = useLocalStorageCache('layer-colors', 86400000 * 30);
+//   const spatialDataCache = useRef(new Map());
+//   const lastBoundsKeyRef = useRef(null);
+//   const fetchAttemptedRef = useRef(new Set());
+//   const socketRef = useRef(null);
+
+//   const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+//   const API_ENDPOINTS = {
+//     buildings: `${SPATIAL_API_BASE}/geojson/buildings`,
+//     floors: `${SPATIAL_API_BASE}/geojson/floors`,
+//     rooms: `${SPATIAL_API_BASE}/geojson/rooms`,
+//     utilities: `${SPATIAL_API_BASE}/geojson/utilities`,
+//     aru_boundary: `${SPATIAL_API_BASE}/geojson/aru-boundary`,
+//   };
+
+//   const layerColors = {
+//     buildings: '#ff5733',
+//     floors: '#2e86de',
+//     rooms: '#28b463',
+//     utilities: '#f1c40f',
+//     aru_boundary: '#000000',
+//   };
+
+//   const dataTypes = [
+//     { key: 'buildings', label: 'Buildings', icon: 'building', hasProperties: true },
+//     { key: 'floors', label: 'Floors', icon: 'layer-group', hasProperties: true },
+//     { key: 'rooms', label: 'Rooms', icon: 'door-open', hasProperties: true },
+//     { key: 'utilities', label: 'Utilities', icon: 'bolt', hasProperties: true },
+//     { key: 'aru_boundary', label: 'ARU Boundary', icon: 'draw-polygon', hasProperties: false },
+//   ];
+
+//   const baseLayers = [
+//     { key: 'openstreetmap', label: 'OpenStreetMap', icon: 'map', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
+//     { key: 'carto_light', label: 'Carto Light', icon: 'map-marked', url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}{r}.png', attribution: '&copy; <a href="https://www.carto.com/">CARTO</a>' },
+//     { key: 'esri_imagery', label: 'Esri World Imagery', icon: 'satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri' },
+//   ];
+
+//   const getLayerColor = useCallback((layer) => {
+//     return customColors[layer] || layerColors[layer];
+//   }, [customColors]);
+
+//   const validateEndpoints = async () => {
+//     const token = localStorage.getItem('token');
+//     if (!token) return;
+
+//     const endpoints = {};
+//     for (const [key, url] of Object.entries(API_ENDPOINTS)) {
+//       try {
+//         await axios.head(url, {
+//           headers: { 'Authorization': `Bearer ${token}` },
+//           timeout: 5000,
+//         });
+//         endpoints[key] = true;
+//       } catch (error) {
+//         console.warn(`Endpoint not available: ${key} - ${error.message}`);
+//         endpoints[key] = false;
+//       }
+//     }
+//     setAvailableEndpoints(endpoints);
+//     localStorage.setItem('availableEndpoints', JSON.stringify(endpoints));
+//     setEndpointValidationDone(true);
+//   };
+
+//   const fetchGeoByBbox = useCallback(
+//     debounce(async (layers, bounds, simplify = 0.00001) => {
+//       if (!layers || layers.size === 0 || !bounds || !endpointValidationDone) return;
+      
+//       const token = localStorage.getItem('token');
+//       if (!token || !checkTokenValidity(token)) {
+//         setError('Session expired. Please login again.');
+//         localStorage.removeItem('token');
+//         navigate('/login');
+//         return;
+//       }
+
+//       try {
+//         setLoading(true);
+//         setError('');
+//         setLoadingLayers(prev => new Set([...prev, ...layers]));
+//         const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+//         const newSpatialData = { ...spatialData };
+
+//         for (const layer of layers) {
+//           if (!API_ENDPOINTS[layer] || availableEndpoints[layer] === false) {
+//             console.warn(`Skipping ${layer} - endpoint not available`);
+//             newSpatialData[layer] = [];
+//             continue;
+//           }
+
+//           const cacheKey = `${layer}-${bbox}-${simplify}`;
+//           if (spatialDataCache.current.has(cacheKey)) {
+//             newSpatialData[layer] = spatialDataCache.current.get(cacheKey);
+//             continue;
+//           }
+
+//           try {
+//             const url = API_ENDPOINTS[layer];
+//             const resp = await fetchWithRetry(url, {
+//               headers: { 
+//                 'Authorization': `Bearer ${token}`,
+//                 'Content-Type': 'application/json',
+//               },
+//               params: { bbox, simplify },
+//             }, 2, 30000);
+
+//             const fc = resp.data || { type: 'FeatureCollection', features: [] };
+//             const features = Array.isArray(fc.features) ? fc.features : [];
+//             newSpatialData[layer] = features.map(feature => {
+//               if (feature.geometry && feature.geometry.type === 'Polygon') {
+//                 return ensurePolygonWindingOrder(feature);
+//               }
+//               return feature;
+//             });
+//             spatialDataCache.current.set(cacheKey, newSpatialData[layer]);
+            
+//             setFailedLayers(prev => {
+//               const newSet = new Set(prev);
+//               newSet.delete(layer);
+//               return newSet;
+//             });
+//           } catch (err) {
+//             console.error(`Error fetching geojson for ${layer}:`, err);
+//             newSpatialData[layer] = [];
+//             setFailedLayers(prev => new Set([...prev, layer]));
+//             if (err.response?.status === 401) {
+//               setError('Authentication failed. Please login again.');
+//               localStorage.removeItem('token');
+//               navigate('/login');
+//               break;
+//             }
+//           }
+//         }
+
+//         setSpatialData(newSpatialData);
+//         spatialCache.set(newSpatialData);
+//       } catch (err) {
+//         console.error('Error fetching geojson by bbox:', err);
+//         setError('Failed to load features for current view');
+//       } finally {
+//         setLoading(false);
+//         setLoadingLayers(new Set());
+//       }
+//     }, 1000),
+//     [navigate, spatialData, availableEndpoints, endpointValidationDone]
+//   );
+
+//   const handleLayerToggle = (layerKey) => {
+//     if (availableEndpoints[layerKey] === false) {
+//       setError(`Layer "${layerKey}" is not available on the server`);
+//       return;
+//     }
+
+//     setSelectedLayers(prev => {
+//       const newLayers = new Set(prev);
+//       if (newLayers.has(layerKey)) {
+//         newLayers.delete(layerKey);
+//       } else {
+//         newLayers.add(layerKey);
+//       }
+//       setSelectedType(layerKey);
+//       return newLayers;
+//     });
+//   };
+
+//   const handleBaseLayerSelect = (layerKey) => {
+//     setSelectedBaseLayer(layerKey);
+//   };
+
+//   const handleColorChange = useCallback((layer, color) => {
+//     const newColors = { ...customColors, [layer]: color };
+//     setCustomColors(newColors);
+//     colorCache.set(newColors);
+//   }, [customColors, colorCache]);
+
+//   const resetColor = useCallback((layer) => {
+//     const newColors = { ...customColors };
+//     delete newColors[layer];
+//     setCustomColors(newColors);
+//     colorCache.set(newColors);
+//   }, [customColors, colorCache]);
+
+//   const toggleSection = (section) => {
+//     setCollapsedSections(prev => ({
+//       ...prev,
+//       [section]: !prev[section],
+//     }));
+//   };
+
+//   const executeQuery = async () => {
+//     const token = localStorage.getItem('token');
+//     if (!token || !checkTokenValidity(token)) {
+//       setError('Session expired. Please login again.');
+//       navigate('/login');
+//       return;
+//     }
+
+//     try {
+//       const response = await axios.post(`${SPATIAL_API_BASE}/query`, {
+//         layer: selectedType,
+//         attribute: queryParams.attribute,
+//         operator: queryParams.operator,
+//         value: queryParams.value,
+//       }, {
+//         headers: { 'Authorization': `Bearer ${token}` },
+//       });
+
+//       setFilteredFeatures({ [selectedType]: response.data.features });
+//       setError('');
+//     } catch (err) {
+//       setError('Query failed: ' + err.message);
+//     }
+//   };
+
+//   const submitFeedback = async () => {
+//     const token = localStorage.getItem('token');
+//     if (!checkUserRole(token, 'Admin') && !checkUserRole(token, 'Planner')) {
+//       setError('You do not have permission to submit feedback.');
+//       return;
+//     }
+
+//     try {
+//       await axios.post(`${SPATIAL_API_BASE}/feedback`, feedbackForm, {
+//         headers: { 'Authorization': `Bearer ${token}` },
+//       });
+//       setFeedbackForm({ roomId: '', comment: '', issueType: '' });
+//       setError('');
+//       alert('Feedback submitted successfully.');
+//     } catch (err) {
+//       setError('Feedback submission failed: ' + err.message);
+//     }
+//   };
+
+//   const exportData = async (format = 'geojson') => {
+//     setIsExporting(true);
+//     setExportProgress(0);
+
+//     try {
+//       const dataToExport = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+//       if (format === 'geojson') {
+//         const blob = new Blob([JSON.stringify(dataToExport)], { type: 'application/json' });
+//         const url = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = url;
+//         a.download = `aru-space-export-${new Date().toISOString().split('T')[0]}.json`;
+//         a.click();
+//         URL.revokeObjectURL(url);
+//       } else if (format === 'csv') {
+//         let csvContent = 'Layer,Room ID,Type,Size (m²),Utilization (%),Capacity,Condition\n';
+//         Object.entries(dataToExport).forEach(([layer, features]) => {
+//           features.forEach(feature => {
+//             const props = feature.properties;
+//             csvContent += `${layer},${props.room_id || ''},${props.type || ''},${props.size || ''},${props.utilization || ''},${props.capacity || ''},${props.condition || ''}\n`;
+//           });
+//         });
+
+//         const blob = new Blob([csvContent], { type: 'text/csv' });
+//         const url = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = url;
+//         a.download = `aru-space-stats-${new Date().toISOString().split('T')[0]}.csv`;
+//         a.click();
+//         URL.revokeObjectURL(url);
+//       }
+//       setExportProgress(100);
+//     } catch (error) {
+//       console.error('Export failed:', error);
+//       setError('Export failed: ' + error.message);
+//     } finally {
+//       setTimeout(() => {
+//         setIsExporting(false);
+//         setExportProgress(0);
+//       }, 1000);
+//     }
+//   };
+
+//   const handleFeatureClick = useCallback((feature) => {
+//     setSelectedFeature(feature);
+//     setFeedbackForm(prev => ({ ...prev, roomId: feature.properties?.room_id || '' }));
+//   }, []);
+
+//   const retryFailedLayers = () => {
+//     if (failedLayers.size === 0) return;
+    
+//     setSelectedLayers(prev => {
+//       const newLayers = new Set([...prev]);
+//       failedLayers.forEach(layer => {
+//         if (availableEndpoints[layer] !== false) {
+//           newLayers.add(layer);
+//         }
+//       });
+//       return newLayers;
+//     });
+//     fetchAttemptedRef.current.clear();
+//   };
+
+//   useEffect(() => {
+//     const token = localStorage.getItem('token');
+//     if (!token || !checkTokenValidity(token)) {
+//       setError('Session expired. Please login again.');
+//       localStorage.removeItem('token');
+//       navigate('/login');
+//       return;
+//     }
+
+//     try {
+//       const payload = JSON.parse(atob(token.split('.')[1]));
+//       setUserRole(payload.role);
+//     } catch {
+//       setError('Invalid token. Please login again.');
+//       navigate('/login');
+//     }
+
+//     const cachedData = spatialCache.get();
+//     if (cachedData) {
+//       setSpatialData(cachedData);
+//     }
+
+//     const savedColors = colorCache.get();
+//     if (savedColors) {
+//       setCustomColors(savedColors);
+//     }
+
+//     validateEndpoints();
+
+//     // Initialize WebSocket for real-time updates
+//     socketRef.current = io(SPATIAL_API_BASE, {
+//       auth: { token },
+//     });
+
+//     socketRef.current.on('data-update', (updatedData) => {
+//       setSpatialData(prev => ({ ...prev, ...updatedData }));
+//       spatialCache.set({ ...spatialData, ...updatedData });
+//     });
+
+//     return () => {
+//       socketRef.current?.disconnect();
+//     };
+//   }, [navigate, spatialCache, colorCache]);
+
+//   // Dashboard data preparation
+//   const dashboardData = {
+//     labels: Object.keys(spatialData).filter(layer => layer !== 'aru_boundary'),
+//     datasets: [{
+//       label: 'Utilization (%)',
+//       data: Object.entries(spatialData)
+//         .filter(([layer]) => layer !== 'aru_boundary')
+//         .map(([_, features]) => {
+//           const utilizations = features
+//             .filter(f => f.properties?.utilization)
+//             .map(f => parseFloat(f.properties.utilization));
+//           return utilizations.length ? (utilizations.reduce((sum, val) => sum + val, 0) / utilizations.length).toFixed(2) : 0;
+//         }),
+//       backgroundColor: Object.keys(spatialData)
+//         .filter(layer => layer !== 'aru_boundary')
+//         .map(layer => getLayerColor(layer)),
+//     }],
+//   };
+
+//   const containerStyle = {
+//     display: 'flex',
+//     height: '100vh',
+//     width: '100vw',
+//     overflow: 'hidden',
+//   };
+
+//   const sidebarStyle = {
+//     width: '350px',
+//     background: 'linear-gradient(to bottom, #2c3e50, #1a2530)',
+//     color: 'white',
+//     display: 'flex',
+//     flexDirection: 'column',
+//     boxShadow: '3px 0 15px rgba(0, 0, 0, 0.2)',
+//     zIndex: 1000,
+//     overflowY: 'auto',
+//   };
+
+//   const logoStyle = {
+//     padding: '20px',
+//     textAlign: 'center',
+//     backgroundColor: '#1a2530',
+//     borderBottom: '1px solid #34495e',
+//   };
+
+//   const sectionHeaderStyle = {
+//     display: 'flex',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     padding: '10px',
+//     backgroundColor: '#2c3e50',
+//     borderRadius: '4px',
+//     margin: '10px 0',
+//     cursor: 'pointer',
+//   };
+
+//   const layerItemStyle = {
+//     display: 'flex',
+//     alignItems: 'center',
+//     padding: '8px',
+//     margin: '4px 0',
+//     backgroundColor: '#34495e',
+//     borderRadius: '4px',
+//     cursor: 'pointer',
+//     transition: 'background-color 0.2s',
+//   };
+
+//   const mapContainerStyle = {
+//     flex: 1,
+//     position: 'relative',
+//   };
+
+//   const buttonStyle = {
+//     padding: '8px 12px',
+//     margin: '4px 0',
+//     width: '100%',
+//     borderRadius: '4px',
+//     border: 'none',
+//     color: '#fff',
+//     cursor: 'pointer',
+//   };
+
+//   const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+
+//   return (
+//     <div style={containerStyle}>
+//       <div style={sidebarStyle}>
+//         <div style={logoStyle}>
+//           <h1 style={{ fontSize: '1.5rem', marginBottom: '5px', color: '#3498db' }}>
+//             <i className="fas fa-map" style={{ marginRight: '10px' }}></i>
+//             ARU Spatial Manager
+//           </h1>
+//           <p style={{ fontSize: '0.9rem', color: '#ecf0f1' }}>Campus Space Optimization</p>
+//         </div>
+
+//         {error && (
+//           <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#d32f2f' }}>
+//             {error}
+//           </div>
+//         )}
+
+//         {selectedFeature && (
+//           <div style={{ padding: '10px', backgroundColor: '#2c3e50', borderRadius: '4px', margin: '10px' }}>
+//             <h4 style={{ color: '#3498db', margin: '0 0 8px 0' }}>Selected Space</h4>
+//             {Object.entries(selectedFeature.properties || {}).map(([key, value]) => (
+//               <div key={key} style={{ fontSize: '12px', marginBottom: '4px' }}>
+//                 <strong>{key}:</strong> {value}
+//               </div>
+//             ))}
+//             <button
+//               style={{ ...buttonStyle, backgroundColor: '#6c757d', marginTop: '8px' }}
+//               onClick={() => setSelectedFeature(null)}
+//             >
+//               Clear Selection
+//             </button>
+//           </div>
+//         )}
+
+//         <div style={sectionHeaderStyle} onClick={() => toggleSection('layers')}>
+//           <h3 style={{ display: 'flex', alignItems: 'center', margin: 0, fontSize: '1rem' }}>
+//             <i className="fas fa-layer-group" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//             Layers
+//           </h3>
+//           <i className={`fas fa-angle-${collapsedSections.layers ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+//         </div>
+
+//         {!collapsedSections.layers && (
+//           <div>
+//             {dataTypes.map(layer => (
+//               <div key={layer.key}>
+//                 <div
+//                   style={{
+//                     ...layerItemStyle,
+//                     backgroundColor: selectedLayers.has(layer.key) ? '#2980b9' : '#34495e',
+//                     opacity: availableEndpoints[layer.key] === false ? 0.5 : 1,
+//                   }}
+//                   onClick={() => handleLayerToggle(layer.key)}
+//                 >
+//                   <input
+//                     type="checkbox"
+//                     checked={selectedLayers.has(layer.key)}
+//                     onChange={() => {}}
+//                     style={{ marginRight: '8px', cursor: 'pointer' }}
+//                     disabled={availableEndpoints[layer.key] === false}
+//                   />
+//                   <span style={{ fontSize: '14px' }}>
+//                     {layer.label}
+//                     {loadingLayers.has(layer.key) && ' ⏳'}
+//                     {mapStats[layer.key] && ` (${mapStats[layer.key].count})`}
+//                     {availableEndpoints[layer.key] === false && ' (Not Available)'}
+//                   </span>
+//                 </div>
+//               </div>
+//             ))}
+//           </div>
+//         )}
+
+//         <div style={sectionHeaderStyle} onClick={() => toggleSection('query')}>
+//           <h3 style={{ display: 'flex', alignItems: 'center', margin: 0, fontSize: '1rem' }}>
+//             <i className="fas fa-search" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//             Query Spaces
+//           </h3>
+//           <i className={`fas fa-angle-${collapsedSections.query ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+//         </div>
+
+//         {!collapsedSections.query && (
+//           <div style={{ padding: '10px', backgroundColor: '#2c3e50', borderRadius: '4px' }}>
+//             <select
+//               value={queryParams.attribute}
+//               onChange={(e) => setQueryParams(prev => ({ ...prev, attribute: e.target.value }))}
+//               style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+//             >
+//               <option value="">Select Attribute</option>
+//               <option value="type">Room Type</option>
+//               <option value="utilization">Utilization (%)</option>
+//               <option value="capacity">Capacity</option>
+//               <option value="condition">Condition</option>
+//             </select>
+//             <select
+//               value={queryParams.operator}
+//               onChange={(e) => setQueryParams(prev => ({ ...prev, operator: e.target.value }))}
+//               style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+//             >
+//               <option value="equals">Equals</option>
+//               <option value="greater">Greater Than</option>
+//               <option value="less">Less Than</option>
+//             </select>
+//             <input
+//               type="text"
+//               value={queryParams.value}
+//               onChange={(e) => setQueryParams(prev => ({ ...prev, value: e.target.value }))}
+//               placeholder="Enter value"
+//               style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+//             />
+//             <button
+//               style={{ ...buttonStyle, backgroundColor: '#007bff' }}
+//               onClick={executeQuery}
+//             >
+//               Run Query
+//             </button>
+//           </div>
+//         )}
+
+//         <div style={sectionHeaderStyle} onClick={() => toggleSection('dashboard')}>
+//           <h3 style={{ display: 'flex', alignItems: 'center', margin: 0, fontSize: '1rem' }}>
+//             <i className="fas fa-chart-bar" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//             Dashboard
+//           </h3>
+//           <i className={`fas fa-angle-${collapsedSections.dashboard ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+//         </div>
+
+//         {!collapsedSections.dashboard && (
+//           <div style={{ padding: '10px', backgroundColor: '#2c3e50', borderRadius: '4px' }}>
+//             <Bar
+//               data={dashboardData}
+//               options={{
+//                 responsive: true,
+//                 plugins: { title: { display: true, text: 'Space Utilization by Layer' } },
+//                 scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Utilization (%)' } } },
+//               }}
+//             />
+//             <button
+//               style={{ ...buttonStyle, backgroundColor: '#28a745', marginTop: '10px' }}
+//               onClick={() => exportData('csv')}
+//               disabled={isExporting}
+//             >
+//               Export Utilization Report
+//             </button>
+//           </div>
+//         )}
+
+//         {(userRole === 'Admin' || userRole === 'Planner') && (
+//           <div style={sectionHeaderStyle} onClick={() => toggleSection('feedback')}>
+//             <h3 style={{ display: 'flex', alignItems: 'center', margin: 0, fontSize: '1rem' }}>
+//               <i className="fas fa-comment" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//               Submit Feedback
+//             </h3>
+//             <i className={`fas fa-angle-${collapsedSections.feedback ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+//           </div>
+//         )}
+
+//         {!collapsedSections.feedback && (userRole === 'Admin' || userRole === 'Planner') && (
+//           <div style={{ padding: '10px', backgroundColor: '#2c3e50', borderRadius: '4px' }}>
+//             <input
+//               type="text"
+//               value={feedbackForm.roomId}
+//               onChange={(e) => setFeedbackForm(prev => ({ ...prev, roomId: e.target.value }))}
+//               placeholder="Room ID"
+//               style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+//             />
+//             <select
+//               value={feedbackForm.issueType}
+//               onChange={(e) => setFeedbackForm(prev => ({ ...prev, issueType: e.target.value }))}
+//               style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+//             >
+//               <option value="">Select Issue Type</option>
+//               <option value="overcrowding">Overcrowding</option>
+//               <option value="maintenance">Maintenance Issue</option>
+//               <option value="equipment">Equipment Issue</option>
+//             </select>
+//             <textarea
+//               value={feedbackForm.comment}
+//               onChange={(e) => setFeedbackForm(prev => ({ ...prev, comment: e.target.value }))}
+//               placeholder="Describe the issue..."
+//               style={{ width: '100%', padding: '8px', marginBottom: '8px', minHeight: '80px' }}
+//             />
+//             <button
+//               style={{ ...buttonStyle, backgroundColor: '#007bff' }}
+//               onClick={submitFeedback}
+//             >
+//               Submit Feedback
+//             </button>
+//           </div>
+//         )}
+
+//         <div style={{ padding: '10px' }}>
+//           <button
+//             style={{ ...buttonStyle, backgroundColor: '#007bff' }}
+//             onClick={() => exportData('geojson')}
+//             disabled={isExporting}
+//           >
+//             {isExporting ? `Exporting... ${exportProgress}%` : 'Export GeoJSON'}
+//           </button>
+//           <button
+//             style={{ ...buttonStyle, backgroundColor: '#dc3545' }}
+//             onClick={() => {
+//               localStorage.removeItem('token');
+//               localStorage.removeItem('spatial-data-cache');
+//               navigate('/login');
+//             }}
+//           >
+//             Logout
+//           </button>
+//         </div>
+//       </div>
+
+//       <div style={mapContainerStyle}>
+//         <MapContainer
+//           center={[-6.766319688389469, 39.21385119998633]} // ARU coordinates
+//           zoom={16}
+//           style={{ width: '100%', height: '100%' }}
+//           whenReady={(map) => {
+//             map.target.on('moveend', () => {
+//               fetchGeoByBbox(selectedLayers, map.target.getBounds());
+//             });
+//           }}
+//         >
+//           <LayersControl position="topright">
+//             {baseLayers.map(layer => (
+//               <LayersControl.BaseLayer 
+//                 key={layer.key} 
+//                 name={layer.label} 
+//                 checked={selectedBaseLayer === layer.key}
+//               >
+//                 <TileLayer
+//                   url={layer.url}
+//                   attribution={layer.attribution}
+//                 />
+//               </LayersControl.BaseLayer>
+//             ))}
+
+//             {Object.entries(displayData).map(([layer, data]) => (
+//               selectedLayers.has(layer) && availableEndpoints[layer] !== false && (
+//                 <LayersControl.Overlay key={layer} name={layer.replace(/_/g, ' ').toUpperCase()} checked>
+//                   <GeoJSON
+//                     data={{ type: 'FeatureCollection', features: data }}
+//                     style={() => ({
+//                       color: getLayerColor(layer),
+//                       weight: 2,
+//                       opacity: 0.7,
+//                       fillOpacity: 0.5,
+//                     })}
+//                     pointToLayer={(feature, latlng) => 
+//                       L.circleMarker(latlng, {
+//                         radius: 5,
+//                         fillColor: getLayerColor(layer),
+//                         color: '#000',
+//                         weight: 1,
+//                         fillOpacity: 0.8,
+//                       })
+//                     }
+//                     onEachFeature={(feature, layerInstance) => {
+//                       if (feature.properties) {
+//                         const popupContent = `
+//                           <div style="min-width: 200px; max-width: 300px; font-size: 12px;">
+//                             <h4 style="margin: 0 0 8px 0; color: #2c3e50;">${layer.replace(/_/g, ' ').toUpperCase()}</h4>
+//                             ${Object.entries(feature.properties)
+//                               .map(([k, v]) => `<b style="color: #34495e;">${k}:</b> ${v}`)
+//                               .join('<br>')}
+//                           </div>`;
+//                         layerInstance.bindPopup(popupContent);
+                        
+//                         layerInstance.on({
+//                           click: () => {
+//                             handleFeatureClick(feature);
+//                           }
+//                         });
+//                       }
+//                     }}
+//                   />
+//                 </LayersControl.Overlay>
+//               )
+//             ))}
+//           </LayersControl>
+//         </MapContainer>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default MapView;jsx
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, LayersControl, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
+import io from 'socket.io-client';
 import 'leaflet/dist/leaflet.css';
 import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
@@ -7158,7 +8066,7 @@ function debounce(fn, wait) {
 }
 
 // Retry fetch helper with exponential backoff
-const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 10000) => {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const controller = new AbortController();
@@ -7373,10 +8281,11 @@ const MapView = () => {
     const endpoints = {};
     for (const [key, url] of Object.entries(API_ENDPOINTS)) {
       try {
-        await axios.head(url, {
+        await fetchWithRetry(url, {
+          method: 'HEAD',
           headers: { 'Authorization': `Bearer ${token}` },
-          timeout: 5000,
-        });
+          timeout: 10000, // Increased timeout
+        }, 3, 2000);
         endpoints[key] = true;
       } catch (error) {
         console.warn(`Endpoint not available: ${key} - ${error.message}`);
@@ -7428,7 +8337,7 @@ const MapView = () => {
                 'Content-Type': 'application/json',
               },
               params: { bbox, simplify },
-            }, 2, 30000);
+            }, 3, 10000);
 
             const fc = resp.data || { type: 'FeatureCollection', features: [] };
             const features = Array.isArray(fc.features) ? fc.features : [];
@@ -7522,14 +8431,19 @@ const MapView = () => {
     }
 
     try {
-      const response = await axios.post(`${SPATIAL_API_BASE}/query`, {
-        layer: selectedType,
-        attribute: queryParams.attribute,
-        operator: queryParams.operator,
-        value: queryParams.value,
-      }, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const response = await fetchWithRetry(`${SPATIAL_API_BASE}/query`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        data: {
+          layer: selectedType,
+          attribute: queryParams.attribute,
+          operator: queryParams.operator,
+          value: queryParams.value,
+        },
+      }, 3, 10000);
 
       setFilteredFeatures({ [selectedType]: response.data.features });
       setError('');
@@ -7546,9 +8460,14 @@ const MapView = () => {
     }
 
     try {
-      await axios.post(`${SPATIAL_API_BASE}/feedback`, feedbackForm, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      await fetchWithRetry(`${SPATIAL_API_BASE}/feedback`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        data: feedbackForm,
+      }, 3, 10000);
       setFeedbackForm({ roomId: '', comment: '', issueType: '' });
       setError('');
       alert('Feedback submitted successfully.');
@@ -7649,20 +8568,32 @@ const MapView = () => {
 
     validateEndpoints();
 
-    // Initialize WebSocket for real-time updates
-    socketRef.current = io(SPATIAL_API_BASE, {
-      auth: { token },
-    });
+    // Initialize WebSocket with error handling
+    try {
+      socketRef.current = io(SPATIAL_API_BASE, {
+        auth: { token },
+        reconnectionAttempts: 3,
+        reconnectionDelay: 2000,
+      });
 
-    socketRef.current.on('data-update', (updatedData) => {
-      setSpatialData(prev => ({ ...prev, ...updatedData }));
-      spatialCache.set({ ...spatialData, ...updatedData });
-    });
+      socketRef.current.on('connect_error', (err) => {
+        console.error('WebSocket connection failed:', err);
+        setError('Failed to connect to real-time updates. Using cached data.');
+      });
+
+      socketRef.current.on('data-update', (updatedData) => {
+        setSpatialData(prev => ({ ...prev, ...updatedData }));
+        spatialCache.set({ ...spatialData, ...updatedData });
+      });
+    } catch (err) {
+      console.error('Failed to initialize WebSocket:', err);
+      setError('Real-time updates unavailable. Please check server connection.');
+    }
 
     return () => {
       socketRef.current?.disconnect();
     };
-  }, [navigate, spatialCache, colorCache]);
+  }, [navigate, spatialCache, colorCache, spatialData]);
 
   // Dashboard data preparation
   const dashboardData = {
