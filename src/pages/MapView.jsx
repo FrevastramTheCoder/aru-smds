@@ -8033,7 +8033,7 @@
 //   );
 // };
 
-// export default MapView;jsx
+// export default MapView;
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8118,7 +8118,7 @@ const checkUserRole = (token, requiredRole) => {
 };
 
 // Local storage cache helper
-const useLocalStorageCache = (key, ttl = 3600000) => {
+const useLocalStorageCache = (key, ttl = 86400000) => {
   const get = useCallback(() => {
     try {
       const item = localStorage.getItem(key);
@@ -8151,7 +8151,6 @@ const useLocalStorageCache = (key, ttl = 3600000) => {
 // Ensure proper polygon winding order
 const ensurePolygonWindingOrder = (feature) => {
   if (!feature.geometry || feature.geometry.type !== 'Polygon') return feature;
-  
   try {
     const coordinates = feature.geometry.coordinates;
     if (coordinates.length > 0 && coordinates[0].length >= 3) {
@@ -8160,7 +8159,6 @@ const ensurePolygonWindingOrder = (feature) => {
         coordinates[0] = coordinates[0].reverse();
       }
     }
-    
     for (let i = 1; i < coordinates.length; i++) {
       if (coordinates[i].length >= 3) {
         const area = calculatePolygonArea(coordinates[i]);
@@ -8169,7 +8167,6 @@ const ensurePolygonWindingOrder = (feature) => {
         }
       }
     }
-    
     return {
       ...feature,
       geometry: {
@@ -8186,13 +8183,11 @@ const ensurePolygonWindingOrder = (feature) => {
 const calculatePolygonArea = (coordinates) => {
   let area = 0;
   const n = coordinates.length;
-  
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     area += coordinates[i][0] * coordinates[j][1];
     area -= coordinates[j][0] * coordinates[i][1];
   }
-  
   return area / 2;
 };
 
@@ -8210,6 +8205,7 @@ const MapView = () => {
     query: true,
     dashboard: true,
     feedback: true,
+    filters: true,
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState('');
@@ -8223,7 +8219,14 @@ const MapView = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [mapStats, setMapStats] = useState({});
   const [showFilters, setShowFilters] = useState(false);
-  const [activeFilters, setActiveFilters] = useState({});
+  const [activeFilters, setActiveFilters] = useState({
+    building: '',
+    floor: '',
+    roomType: '',
+    utilizationMin: '',
+    utilizationMax: '',
+    condition: '',
+  });
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [endpointValidationDone, setEndpointValidationDone] = useState(false);
   const [queryParams, setQueryParams] = useState({ attribute: '', operator: 'equals', value: '' });
@@ -8284,8 +8287,8 @@ const MapView = () => {
         await fetchWithRetry(url, {
           method: 'HEAD',
           headers: { 'Authorization': `Bearer ${token}` },
-          timeout: 10000, // Increased timeout
-        }, 3, 2000);
+          timeout: 10000,
+        });
         endpoints[key] = true;
       } catch (error) {
         console.warn(`Endpoint not available: ${key} - ${error.message}`);
@@ -8330,15 +8333,14 @@ const MapView = () => {
           }
 
           try {
-            const url = API_ENDPOINTS[layer];
+            const url = `${API_ENDPOINTS[layer]}${activeFilters.building ? `?building=${activeFilters.building}` : ''}`;
             const resp = await fetchWithRetry(url, {
               headers: { 
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
               },
-              params: { bbox, simplify },
-            }, 3, 10000);
-
+              params: { bbox, simplify, ...activeFilters },
+            });
             const fc = resp.data || { type: 'FeatureCollection', features: [] };
             const features = Array.isArray(fc.features) ? fc.features : [];
             newSpatialData[layer] = features.map(feature => {
@@ -8348,7 +8350,6 @@ const MapView = () => {
               return feature;
             });
             spatialDataCache.current.set(cacheKey, newSpatialData[layer]);
-            
             setFailedLayers(prev => {
               const newSet = new Set(prev);
               newSet.delete(layer);
@@ -8369,6 +8370,7 @@ const MapView = () => {
 
         setSpatialData(newSpatialData);
         spatialCache.set(newSpatialData);
+        updateMapStats(newSpatialData);
       } catch (err) {
         console.error('Error fetching geojson by bbox:', err);
         setError('Failed to load features for current view');
@@ -8377,15 +8379,32 @@ const MapView = () => {
         setLoadingLayers(new Set());
       }
     }, 1000),
-    [navigate, spatialData, availableEndpoints, endpointValidationDone]
+    [navigate, spatialData, availableEndpoints, endpointValidationDone, activeFilters]
   );
+
+  const updateMapStats = (data) => {
+    const stats = {};
+    Object.entries(data).forEach(([layer, features]) => {
+      stats[layer] = {
+        count: features.length,
+        avgUtilization: features
+          .filter(f => f.properties?.utilization)
+          .reduce((sum, f) => sum + parseFloat(f.properties.utilization || 0), 0) / (features.length || 1),
+        conditions: features.reduce((acc, f) => {
+          const condition = f.properties?.condition || 'Unknown';
+          acc[condition] = (acc[condition] || 0) + 1;
+          return acc;
+        }, {}),
+      };
+    });
+    setMapStats(stats);
+  };
 
   const handleLayerToggle = (layerKey) => {
     if (availableEndpoints[layerKey] === false) {
       setError(`Layer "${layerKey}" is not available on the server`);
       return;
     }
-
     setSelectedLayers(prev => {
       const newLayers = new Set(prev);
       if (newLayers.has(layerKey)) {
@@ -8429,7 +8448,6 @@ const MapView = () => {
       navigate('/login');
       return;
     }
-
     try {
       const response = await fetchWithRetry(`${SPATIAL_API_BASE}/query`, {
         method: 'POST',
@@ -8443,8 +8461,7 @@ const MapView = () => {
           operator: queryParams.operator,
           value: queryParams.value,
         },
-      }, 3, 10000);
-
+      });
       setFilteredFeatures({ [selectedType]: response.data.features });
       setError('');
     } catch (err) {
@@ -8458,7 +8475,6 @@ const MapView = () => {
       setError('You do not have permission to submit feedback.');
       return;
     }
-
     try {
       await fetchWithRetry(`${SPATIAL_API_BASE}/feedback`, {
         method: 'POST',
@@ -8467,7 +8483,7 @@ const MapView = () => {
           'Content-Type': 'application/json',
         },
         data: feedbackForm,
-      }, 3, 10000);
+      });
       setFeedbackForm({ roomId: '', comment: '', issueType: '' });
       setError('');
       alert('Feedback submitted successfully.');
@@ -8479,7 +8495,6 @@ const MapView = () => {
   const exportData = async (format = 'geojson') => {
     setIsExporting(true);
     setExportProgress(0);
-
     try {
       const dataToExport = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
       if (format === 'geojson') {
@@ -8498,7 +8513,6 @@ const MapView = () => {
             csvContent += `${layer},${props.room_id || ''},${props.type || ''},${props.size || ''},${props.utilization || ''},${props.capacity || ''},${props.condition || ''}\n`;
           });
         });
-
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -8526,7 +8540,6 @@ const MapView = () => {
 
   const retryFailedLayers = () => {
     if (failedLayers.size === 0) return;
-    
     setSelectedLayers(prev => {
       const newLayers = new Set([...prev]);
       failedLayers.forEach(layer => {
@@ -8537,6 +8550,11 @@ const MapView = () => {
       return newLayers;
     });
     fetchAttemptedRef.current.clear();
+  };
+
+  const applyFilters = () => {
+    setFilteredFeatures({});
+    fetchGeoByBbox(selectedLayers, lastBoundsKeyRef.current);
   };
 
   useEffect(() => {
@@ -8559,6 +8577,7 @@ const MapView = () => {
     const cachedData = spatialCache.get();
     if (cachedData) {
       setSpatialData(cachedData);
+      updateMapStats(cachedData);
     }
 
     const savedColors = colorCache.get();
@@ -8568,7 +8587,6 @@ const MapView = () => {
 
     validateEndpoints();
 
-    // Initialize WebSocket with error handling
     try {
       socketRef.current = io(SPATIAL_API_BASE, {
         auth: { token },
@@ -8582,8 +8600,17 @@ const MapView = () => {
       });
 
       socketRef.current.on('data-update', (updatedData) => {
-        setSpatialData(prev => ({ ...prev, ...updatedData }));
-        spatialCache.set({ ...spatialData, ...updatedData });
+        setSpatialData(prev => {
+          const newData = { ...prev, ...updatedData };
+          spatialCache.set(newData);
+          updateMapStats(newData);
+          return newData;
+        });
+      });
+
+      socketRef.current.on('feedback-update', (updatedFeedback) => {
+        setError('Feedback updated. Refreshing data...');
+        fetchGeoByBbox(selectedLayers, lastBoundsKeyRef.current);
       });
     } catch (err) {
       console.error('Failed to initialize WebSocket:', err);
@@ -8593,7 +8620,7 @@ const MapView = () => {
     return () => {
       socketRef.current?.disconnect();
     };
-  }, [navigate, spatialCache, colorCache, spatialData]);
+  }, [navigate, spatialCache, colorCache]);
 
   // Dashboard data preparation
   const dashboardData = {
@@ -8676,6 +8703,16 @@ const MapView = () => {
     cursor: 'pointer',
   };
 
+  const inputStyle = {
+    width: '100%',
+    padding: '8px',
+    marginBottom: '8px',
+    borderRadius: '4px',
+    border: '1px solid #34495e',
+    backgroundColor: '#2c3e50',
+    color: '#fff',
+  };
+
   const displayData = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
 
   return (
@@ -8690,7 +8727,7 @@ const MapView = () => {
         </div>
 
         {error && (
-          <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#d32f2f' }}>
+          <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#d32f2f', margin: '10px' }}>
             {error}
           </div>
         )}
@@ -8721,7 +8758,7 @@ const MapView = () => {
         </div>
 
         {!collapsedSections.layers && (
-          <div>
+          <div style={{ padding: '0 10px' }}>
             {dataTypes.map(layer => (
               <div key={layer.key}>
                 <div
@@ -8746,8 +8783,106 @@ const MapView = () => {
                     {availableEndpoints[layer.key] === false && ' (Not Available)'}
                   </span>
                 </div>
+                {layer.hasProperties && selectedLayers.has(layer.key) && (
+                  <div style={{ marginLeft: '20px', marginTop: '4px' }}>
+                    <input
+                      type="color"
+                      value={getLayerColor(layer.key)}
+                      onChange={(e) => handleColorChange(layer.key, e.target.value)}
+                      style={{ width: '40px', marginRight: '8px' }}
+                    />
+                    <button
+                      style={{ ...buttonStyle, backgroundColor: '#6c757d', padding: '4px 8px', fontSize: '12px' }}
+                      onClick={() => resetColor(layer.key)}
+                    >
+                      Reset Color
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
+            {failedLayers.size > 0 && (
+              <button
+                style={{ ...buttonStyle, backgroundColor: '#ffc107', marginTop: '8px' }}
+                onClick={retryFailedLayers}
+              >
+                Retry Failed Layers
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={sectionHeaderStyle} onClick={() => toggleSection('filters')}>
+          <h3 style={{ display: 'flex', alignItems: 'center', margin: 0, fontSize: '1rem' }}>
+            <i className="fas fa-filter" style={{ marginRight: '10px', color: '#3498db' }}></i>
+            Filters
+          </h3>
+          <i className={`fas fa-angle-${collapsedSections.filters ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+        </div>
+
+        {!collapsedSections.filters && (
+          <div style={{ padding: '10px', backgroundColor: '#2c3e50', borderRadius: '4px' }}>
+            <input
+              type="text"
+              value={activeFilters.building}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, building: e.target.value }))}
+              placeholder="Building Name"
+              style={inputStyle}
+            />
+            <input
+              type="text"
+              value={activeFilters.floor}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, floor: e.target.value }))}
+              placeholder="Floor Number"
+              style={inputStyle}
+            />
+            <select
+              value={activeFilters.roomType}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, roomType: e.target.value }))}
+              style={inputStyle}
+            >
+              <option value="">All Room Types</option>
+              <option value="classroom">Classroom</option>
+              <option value="office">Office</option>
+              <option value="lab">Lab</option>
+              <option value="other">Other</option>
+            </select>
+            <input
+              type="number"
+              value={activeFilters.utilizationMin}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, utilizationMin: e.target.value }))}
+              placeholder="Min Utilization (%)"
+              style={inputStyle}
+            />
+            <input
+              type="number"
+              value={activeFilters.utilizationMax}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, utilizationMax: e.target.value }))}
+              placeholder="Max Utilization (%)"
+              style={inputStyle}
+            />
+            <select
+              value={activeFilters.condition}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, condition: e.target.value }))}
+              style={inputStyle}
+            >
+              <option value="">All Conditions</option>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Bad">Bad</option>
+            </select>
+            <button
+              style={{ ...buttonStyle, backgroundColor: '#007bff' }}
+              onClick={applyFilters}
+            >
+              Apply Filters
+            </button>
+            <button
+              style={{ ...buttonStyle, backgroundColor: '#6c757d', marginTop: '4px' }}
+              onClick={() => setActiveFilters({ building: '', floor: '', roomType: '', utilizationMin: '', utilizationMax: '', condition: '' })}
+            >
+              Clear Filters
+            </button>
           </div>
         )}
 
@@ -8764,7 +8899,7 @@ const MapView = () => {
             <select
               value={queryParams.attribute}
               onChange={(e) => setQueryParams(prev => ({ ...prev, attribute: e.target.value }))}
-              style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+              style={inputStyle}
             >
               <option value="">Select Attribute</option>
               <option value="type">Room Type</option>
@@ -8775,7 +8910,7 @@ const MapView = () => {
             <select
               value={queryParams.operator}
               onChange={(e) => setQueryParams(prev => ({ ...prev, operator: e.target.value }))}
-              style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+              style={inputStyle}
             >
               <option value="equals">Equals</option>
               <option value="greater">Greater Than</option>
@@ -8786,7 +8921,7 @@ const MapView = () => {
               value={queryParams.value}
               onChange={(e) => setQueryParams(prev => ({ ...prev, value: e.target.value }))}
               placeholder="Enter value"
-              style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+              style={inputStyle}
             />
             <button
               style={{ ...buttonStyle, backgroundColor: '#007bff' }}
@@ -8842,12 +8977,12 @@ const MapView = () => {
               value={feedbackForm.roomId}
               onChange={(e) => setFeedbackForm(prev => ({ ...prev, roomId: e.target.value }))}
               placeholder="Room ID"
-              style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+              style={inputStyle}
             />
             <select
               value={feedbackForm.issueType}
               onChange={(e) => setFeedbackForm(prev => ({ ...prev, issueType: e.target.value }))}
-              style={{ width: '100%', padding: '8px', marginBottom: '8px' }}
+              style={inputStyle}
             >
               <option value="">Select Issue Type</option>
               <option value="overcrowding">Overcrowding</option>
@@ -8858,7 +8993,7 @@ const MapView = () => {
               value={feedbackForm.comment}
               onChange={(e) => setFeedbackForm(prev => ({ ...prev, comment: e.target.value }))}
               placeholder="Describe the issue..."
-              style={{ width: '100%', padding: '8px', marginBottom: '8px', minHeight: '80px' }}
+              style={{ ...inputStyle, minHeight: '80px' }}
             />
             <button
               style={{ ...buttonStyle, backgroundColor: '#007bff' }}
@@ -8897,7 +9032,8 @@ const MapView = () => {
           style={{ width: '100%', height: '100%' }}
           whenReady={(map) => {
             map.target.on('moveend', () => {
-              fetchGeoByBbox(selectedLayers, map.target.getBounds());
+              lastBoundsKeyRef.current = map.target.getBounds();
+              fetchGeoByBbox(selectedLayers, lastBoundsKeyRef.current);
             });
           }}
         >
@@ -8945,7 +9081,6 @@ const MapView = () => {
                               .join('<br>')}
                           </div>`;
                         layerInstance.bindPopup(popupContent);
-                        
                         layerInstance.on({
                           click: () => {
                             handleFeatureClick(feature);
