@@ -974,9 +974,518 @@
 
 // export default MapView;
 
-import React, { useState, useEffect } from 'react';
+// import React, { useState, useEffect } from 'react';
+// import { MapContainer, TileLayer, LayersControl, GeoJSON } from 'react-leaflet';
+// import L from 'leaflet';
+// import 'leaflet/dist/leaflet.css';
+
+// // Fix for default markers in react-leaflet
+// delete L.Icon.Default.prototype._getIconUrl;
+// L.Icon.Default.mergeOptions({
+//   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+//   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+//   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+// });
+
+// const MapView = () => {
+//   const [spatialData, setSpatialData] = useState({});
+//   const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
+//   const [collapsedSections, setCollapsedSections] = useState({
+//     landbase: false,
+//     base: false,
+//     weather: false,
+//     legend: false
+//   });
+//   const [searchQuery, setSearchQuery] = useState('');
+
+//   // Sample spatial data
+//   const sampleData = {
+//     buildings: {
+//       type: 'FeatureCollection',
+//       features: [
+//         {
+//           type: 'Feature',
+//           properties: { name: 'Main Building', height: '15m' },
+//           geometry: {
+//             type: 'Polygon',
+//             coordinates: [[[-0.1275, 51.507], [-0.127, 51.507], [-0.127, 51.5074], [-0.1275, 51.5074], [-0.1275, 51.507]]]
+//           }
+//         }
+//       ]
+//     },
+//     roads: {
+//       type: 'FeatureCollection',
+//       features: [
+//         {
+//           type: 'Feature',
+//           properties: { name: 'Main Street', type: 'primary' },
+//           geometry: {
+//             type: 'LineString',
+//             coordinates: [[-0.13, 51.51], [-0.12, 51.51]]
+//           }
+//         }
+//       ]
+//     }
+//   };
+
+//   useEffect(() => {
+//     setSpatialData(sampleData);
+//   }, []);
+
+//   const handleLayerToggle = (layerKey) => {
+//     setSelectedLayers(prev => {
+//       const newLayers = new Set(prev);
+//       if (newLayers.has(layerKey)) {
+//         newLayers.delete(layerKey);
+//       } else {
+//         newLayers.add(layerKey);
+//       }
+//       return newLayers;
+//     });
+//   };
+
+//   const toggleSection = (section) => {
+//     setCollapsedSections(prev => ({
+//       ...prev,
+//       [section]: !prev[section]
+//     }));
+//   };
+
+//   const layerColors = {
+//     buildings: '#ff5733',
+//     roads: '#2e86de',
+//     footpaths: '#28b463',
+//     vegetation: '#27ae60',
+//     parking: '#f1c40f',
+//     solid_waste: '#8e44ad',
+//     electricity: '#e67e22',
+//     water_supply: '#3498db',
+//     drainage: '#16a085',
+//     vimbweta: '#d35400',
+//     security: '#c0392b',
+//     recreational_areas: '#7f8c8d',
+//     aru_boundary: '#000000'
+//   };
+
+//   const OPENWEATHER_API_KEY = "YOUR_API_KEY";
+
+//   // Styles
+//   const containerStyle = {
+//     display: 'flex',
+//     height: '100vh',
+//     width: '100vw',
+//     overflow: 'hidden'
+//   };
+
+//   const sidebarStyle = {
+//     width: '320px',
+//     background: 'linear-gradient(to bottom, #2c3e50, #1a2530)',
+//     color: 'white',
+//     display: 'flex',
+//     flexDirection: 'column',
+//     boxShadow: '3px 0 15px rgba(0, 0, 0, 0.2)',
+//     zIndex: 1000,
+//     overflowY: 'auto'
+//   };
+
+//   const logoStyle = {
+//     padding: '20px',
+//     textAlign: 'center',
+//     backgroundColor: '#1a2530',
+//     borderBottom: '1px solid #34495e'
+//   };
+
+//   const searchBoxStyle = {
+//     padding: '10px 15px',
+//     backgroundColor: '#2c3e50',
+//     borderBottom: '1px solid #34495e'
+//   };
+
+//   const inputStyle = {
+//     width: '100%',
+//     padding: '8px 12px',
+//     borderRadius: '20px',
+//     border: 'none',
+//     backgroundColor: '#1a2530',
+//     color: 'white'
+//   };
+
+//   const layersContainerStyle = {
+//     padding: '15px'
+//   };
+
+//   const sectionHeaderStyle = {
+//     display: 'flex',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     padding: '10px',
+//     backgroundColor: '#2c3e50',
+//     borderRadius: '4px',
+//     margin: '10px 0',
+//     cursor: 'pointer'
+//   };
+
+//   const sectionTitleStyle = {
+//     display: 'flex',
+//     alignItems: 'center',
+//     margin: 0,
+//     fontSize: '1rem'
+//   };
+
+//   const layerItemStyle = {
+//     display: 'flex',
+//     alignItems: 'center',
+//     padding: '8px',
+//     margin: '4px 0',
+//     backgroundColor: '#34495e',
+//     borderRadius: '4px',
+//     cursor: 'pointer',
+//     transition: 'background-color 0.2s'
+//   };
+
+//   const mapContainerStyle = {
+//     flex: 1,
+//     position: 'relative'
+//   };
+
+//   const legendItemStyle = {
+//     display: 'flex',
+//     alignItems: 'center',
+//     marginBottom: '8px',
+//     padding: '4px'
+//   };
+
+//   const colorBoxStyle = {
+//     width: '16px',
+//     height: '16px',
+//     marginRight: '8px',
+//     borderRadius: '3px'
+//   };
+
+//   return (
+//     <div style={containerStyle}>
+//       <div style={sidebarStyle}>
+//         <div style={logoStyle}>
+//           <h1 style={{ fontSize: '1.5rem', marginBottom: '5px', color: '#3498db' }}>
+//             <i className="fas fa-map" style={{ marginRight: '10px' }}></i>
+//             GeoMap Manager
+//           </h1>
+//           <p style={{ fontSize: '0.9rem', color: '#ecf0f1' }}>Advanced mapping interface with layer control</p>
+//         </div>
+        
+//         <div style={searchBoxStyle}>
+//           <input
+//             type="text"
+//             placeholder="Search location..."
+//             value={searchQuery}
+//             onChange={(e) => setSearchQuery(e.target.value)}
+//             style={inputStyle}
+//           />
+//         </div>
+        
+//         <div style={layersContainerStyle}>
+//           {/* Landbase Layers Section */}
+//           <div style={sectionHeaderStyle} onClick={() => toggleSection('landbase')}>
+//             <h3 style={sectionTitleStyle}>
+//               <i className="fas fa-layer-group" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//               Landbase Layers
+//             </h3>
+//             <i className={`fas fa-chevron-${collapsedSections.landbase ? 'down' : 'up'}`}></i>
+//           </div>
+          
+//           {!collapsedSections.landbase && (
+//             <div>
+//               {[
+//                 { key: 'buildings', label: 'Buildings', icon: 'building' },
+//                 { key: 'roads', label: 'Roads', icon: 'road' },
+//                 { key: 'footpaths', label: 'Footpaths', icon: 'walking' },
+//                 { key: 'vegetation', label: 'Vegetation', icon: 'tree' },
+//                 { key: 'parking', label: 'Parking', icon: 'parking' },
+//                 { key: 'solid_waste', label: 'Solid Waste', icon: 'trash' },
+//                 { key: 'electricity', label: 'Electricity', icon: 'bolt' },
+//                 { key: 'water_supply', label: 'Water Supply', icon: 'tint' },
+//                 { key: 'drainage', label: 'Drainage System', icon: 'water' },
+//                 { key: 'vimbweta', label: 'Vimbweta', icon: 'map-marked' },
+//                 { key: 'security', label: 'Security Lights', icon: 'lightbulb' },
+//                 { key: 'recreational_areas', label: 'Recreational Areas', icon: 'baseball-ball' },
+//                 { key: 'aru_boundary', label: 'ARU Boundary', icon: 'draw-polygon' }
+//               ].map(layer => (
+//                 <div
+//                   key={layer.key}
+//                   style={{
+//                     ...layerItemStyle,
+//                     backgroundColor: selectedLayers.has(layer.key) ? '#2980b9' : '#34495e'
+//                   }}
+//                   onClick={() => handleLayerToggle(layer.key)}
+//                 >
+//                   <input
+//                     type="checkbox"
+//                     checked={selectedLayers.has(layer.key)}
+//                     onChange={() => {}}
+//                     style={{ marginRight: '10px' }}
+//                   />
+//                   <div style={{
+//                     width: '20px',
+//                     height: '20px',
+//                     marginRight: '10px',
+//                     display: 'flex',
+//                     justifyContent: 'center',
+//                     alignItems: 'center',
+//                     backgroundColor: '#2c3e50',
+//                     borderRadius: '4px'
+//                   }}>
+//                     <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+//                   </div>
+//                   <span style={{ fontSize: '14px' }}>{layer.label}</span>
+//                 </div>
+//               ))}
+//             </div>
+//           )}
+          
+//           {/* Base Layers Section */}
+//           <div style={sectionHeaderStyle} onClick={() => toggleSection('base')}>
+//             <h3 style={sectionTitleStyle}>
+//               <i className="fas fa-globe" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//               Base Layers
+//             </h3>
+//             <i className={`fas fa-chevron-${collapsedSections.base ? 'down' : 'up'}`}></i>
+//           </div>
+          
+//           {!collapsedSections.base && (
+//             <div>
+//               {[
+//                 { key: 'openstreetmap', label: 'OpenStreetMap', icon: 'map' },
+//                 { key: 'carto_light', label: 'Carto Light', icon: 'map-marked' },
+//                 { key: 'esri_imagery', label: 'Esri World Imagery', icon: 'satellite' },
+//                 { key: 'google_satellite', label: 'Google Satellite', icon: 'satellite-dish' },
+//                 { key: 'google_hybrid', label: 'Google Hybrid', icon: 'layer-group' },
+//                 { key: 'nasa_gibs', label: 'NASA GIBS', icon: 'globe-americas' }
+//               ].map(layer => (
+//                 <div
+//                   key={layer.key}
+//                   style={layerItemStyle}
+//                 >
+//                   <input
+//                     type="radio"
+//                     name="baseLayer"
+//                     defaultChecked={layer.key === 'openstreetmap'}
+//                     style={{ marginRight: '10px' }}
+//                   />
+//                   <div style={{
+//                     width: '20px',
+//                     height: '20px',
+//                     marginRight: '10px',
+//                     display: 'flex',
+//                     justifyContent: 'center',
+//                     alignItems: 'center',
+//                     backgroundColor: '#2c3e50',
+//                     borderRadius: '4px'
+//                   }}>
+//                     <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+//                   </div>
+//                   <span style={{ fontSize: '14px' }}>{layer.label}</span>
+//                 </div>
+//               ))}
+//             </div>
+//           )}
+          
+//           {/* Weather Overlays Section */}
+//           <div style={sectionHeaderStyle} onClick={() => toggleSection('weather')}>
+//             <h3 style={sectionTitleStyle}>
+//               <i className="fas fa-cloud-sun" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//               Weather Overlays
+//             </h3>
+//             <i className={`fas fa-chevron-${collapsedSections.weather ? 'down' : 'up'}`}></i>
+//           </div>
+          
+//           {!collapsedSections.weather && (
+//             <div>
+//               {[
+//                 { key: 'clouds', label: 'Clouds', icon: 'cloud' },
+//                 { key: 'precipitation', label: 'Precipitation', icon: 'cloud-rain' },
+//                 { key: 'temperature', label: 'Temperature', icon: 'thermometer-half' },
+//                 { key: 'wind', label: 'Wind', icon: 'wind' }
+//               ].map(layer => (
+//                 <div
+//                   key={layer.key}
+//                   style={layerItemStyle}
+//                 >
+//                   <input
+//                     type="checkbox"
+//                     style={{ marginRight: '10px' }}
+//                   />
+//                   <div style={{
+//                     width: '20px',
+//                     height: '20px',
+//                     marginRight: '10px',
+//                     display: 'flex',
+//                     justifyContent: 'center',
+//                     alignItems: 'center',
+//                     backgroundColor: '#2c3e50',
+//                     borderRadius: '4px'
+//                   }}>
+//                     <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px', color: '#3498db' }}></i>
+//                   </div>
+//                   <span style={{ fontSize: '14px' }}>{layer.label}</span>
+//                 </div>
+//               ))}
+//             </div>
+//           )}
+          
+//           {/* Legend Section */}
+//           <div style={sectionHeaderStyle} onClick={() => toggleSection('legend')}>
+//             <h3 style={sectionTitleStyle}>
+//               <i className="fas fa-map-legend" style={{ marginRight: '10px', color: '#3498db' }}></i>
+//               Legend
+//             </h3>
+//             <i className={`fas fa-chevron-${collapsedSections.legend ? 'down' : 'up'}`}></i>
+//           </div>
+          
+//           {!collapsedSections.legend && (
+//             <div style={{ backgroundColor: '#2c3e50', padding: '10px', borderRadius: '4px' }}>
+//               {Object.entries(layerColors).map(([layer, color]) => (
+//                 <div key={layer} style={legendItemStyle}>
+//                   <div style={{ ...colorBoxStyle, backgroundColor: color }}></div>
+//                   <span style={{ fontSize: '13px' }}>{layer.replace(/_/g, ' ')}</span>
+//                 </div>
+//               ))}
+//               <div style={legendItemStyle}>
+//                 <div style={{ ...colorBoxStyle, backgroundColor: '#3498db' }}></div>
+//                 <span style={{ fontSize: '13px' }}>Water Bodies</span>
+//               </div>
+//               <div style={legendItemStyle}>
+//                 <div style={{ ...colorBoxStyle, backgroundColor: '#27ae60' }}></div>
+//                 <span style={{ fontSize: '13px' }}>Vegetation</span>
+//               </div>
+//               <div style={legendItemStyle}>
+//                 <div style={{ ...colorBoxStyle, backgroundColor: '#c0392b' }}></div>
+//                 <span style={{ fontSize: '13px' }}>Residential Areas</span>
+//               </div>
+//             </div>
+//           )}
+//         </div>
+//       </div>
+      
+//       <div style={mapContainerStyle}>
+//         <MapContainer
+//           center={[51.505, -0.09]}
+//           zoom={13}
+//           style={{ width: '100%', height: '100%' }}
+//         >
+//           <LayersControl position="topright">
+//             <LayersControl.BaseLayer checked name="OpenStreetMap">
+//               <TileLayer
+//                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+//                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+//               />
+//             </LayersControl.BaseLayer>
+
+//             <LayersControl.BaseLayer name="Carto Light">
+//               <TileLayer
+//                 url="https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}{r}.png"
+//                 attribution='&copy; <a href="https://www.carto.com/">CARTO</a>'
+//               />
+//             </LayersControl.BaseLayer>
+
+//             <LayersControl.BaseLayer name="Esri World Imagery">
+//               <TileLayer
+//                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+//                 attribution="Tiles © Esri"
+//               />
+//             </LayersControl.BaseLayer>
+
+//             <LayersControl.BaseLayer name="Google Satellite">
+//               <TileLayer
+//                 url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+//                 attribution="© Google"
+//               />
+//             </LayersControl.BaseLayer>
+
+//             <LayersControl.BaseLayer name="Google Hybrid">
+//               <TileLayer
+//                 url="https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}"
+//                 attribution="© Google"
+//               />
+//             </LayersControl.BaseLayer>
+
+//             <LayersControl.BaseLayer name="NASA GIBS">
+//               <TileLayer
+//                 url="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2023-01-01/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg"
+//                 attribution="Imagery © NASA EOSDIS GIBS"
+//               />
+//             </LayersControl.BaseLayer>
+
+//             {/* Weather Overlays */}
+//             <LayersControl.Overlay name="Weather - Clouds">
+//               <TileLayer
+//                 url={`https://tile.openweathermap.org/map/clouds/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
+//                 attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
+//                 opacity={0.6}
+//               />
+//             </LayersControl.Overlay>
+
+//             <LayersControl.Overlay name="Weather - Precipitation">
+//               <TileLayer
+//                 url={`https://tile.openweathermap.org/map/precipitation/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
+//                 attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
+//                 opacity={0.6}
+//               />
+//             </LayersControl.Overlay>
+
+//             <LayersControl.Overlay name="Weather - Temperature">
+//               <TileLayer
+//                 url={`https://tile.openweathermap.org/map/temp/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
+//                 attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
+//                 opacity={0.6}
+//               />
+//             </LayersControl.Overlay>
+
+//             <LayersControl.Overlay name="Weather - Wind">
+//               <TileLayer
+//                 url={`https://tile.openweathermap.org/map/wind/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
+//                 attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
+//                 opacity={0.6}
+//               />
+//             </LayersControl.Overlay>
+
+//             {/* Render selected spatial data layers */}
+//             {Object.entries(spatialData).map(([layer, data]) => (
+//               selectedLayers.has(layer) && (
+//                 <LayersControl.Overlay key={layer} name={layer} checked>
+//                   <GeoJSON
+//                     data={data}
+//                     style={{
+//                       color: layerColors[layer] || '#000',
+//                       weight: 2,
+//                       opacity: 0.7,
+//                       fillOpacity: 0.5
+//                     }}
+//                     onEachFeature={(feature, layer) => {
+//                       if (feature.properties) {
+//                         const popupContent = Object.entries(feature.properties)
+//                           .map(([key, value]) => `<b>${key}:</b> ${value}`)
+//                           .join('<br>');
+//                         layer.bindPopup(popupContent);
+//                       }
+//                     }}
+//                   />
+//                 </LayersControl.Overlay>
+//               )
+//             ))}
+//           </LayersControl>
+//         </MapContainer>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default MapView;
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, LayersControl, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
+import axios from 'axios';
 import 'leaflet/dist/leaflet.css';
 
 // Fix for default markers in react-leaflet
@@ -986,6 +1495,85 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+
+// Debounce helper
+function debounce(fn, wait) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+// Retry fetch helper with exponential backoff
+const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const response = await axios({
+        ...options,
+        url,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        throw error;
+      }
+      if (error.response?.status === 429) {
+        const retryAfter = error.response.headers['retry-after'] || 5;
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        continue;
+      }
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+    }
+  }
+};
+
+// Token validation helper
+const checkTokenValidity = (token) => {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 >= Date.now();
+  } catch {
+    return false;
+  }
+};
+
+// Local storage cache helper
+const useLocalStorageCache = (key, ttl = 3600000) => {
+  const get = useCallback(() => {
+    try {
+      const item = localStorage.getItem(key);
+      if (!item) return null;
+      const { value, timestamp } = JSON.parse(item);
+      if (Date.now() - timestamp > ttl) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return value;
+    } catch {
+      return null;
+    }
+  }, [key, ttl]);
+
+  const set = useCallback((value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        value,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.warn('Could not save to localStorage:', error);
+    }
+  }, [key]);
+
+  return { get, set };
+};
 
 const MapView = () => {
   const [spatialData, setSpatialData] = useState({});
@@ -997,58 +1585,39 @@ const MapView = () => {
     legend: false
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingLayers, setLoadingLayers] = useState(new Set());
+  const [failedLayers, setFailedLayers] = useState(new Set());
+  const [availableEndpoints, setAvailableEndpoints] = useState({});
+  const [customColors, setCustomColors] = useState({});
+  const [filteredFeatures, setFilteredFeatures] = useState({});
+  const [exportProgress, setExportProgress] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Sample spatial data
-  const sampleData = {
-    buildings: {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          properties: { name: 'Main Building', height: '15m' },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[[-0.1275, 51.507], [-0.127, 51.507], [-0.127, 51.5074], [-0.1275, 51.5074], [-0.1275, 51.507]]]
-          }
-        }
-      ]
-    },
-    roads: {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          properties: { name: 'Main Street', type: 'primary' },
-          geometry: {
-            type: 'LineString',
-            coordinates: [[-0.13, 51.51], [-0.12, 51.51]]
-          }
-        }
-      ]
-    }
-  };
+  const navigate = useNavigate();
+  const location = useLocation();
+  const spatialCache = useLocalStorageCache('spatial-data-cache', 86400000);
+  const colorCache = useLocalStorageCache('layer-colors', 86400000 * 30);
+  const spatialDataCache = useRef(new Map());
+  const lastBoundsKeyRef = useRef(null);
 
-  useEffect(() => {
-    setSpatialData(sampleData);
-  }, []);
-
-  const handleLayerToggle = (layerKey) => {
-    setSelectedLayers(prev => {
-      const newLayers = new Set(prev);
-      if (newLayers.has(layerKey)) {
-        newLayers.delete(layerKey);
-      } else {
-        newLayers.add(layerKey);
-      }
-      return newLayers;
-    });
-  };
-
-  const toggleSection = (section) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+  const SPATIAL_API_BASE = (import.meta.env.VITE_API_SPATIAL_URL || 'https://smds.onrender.com/api/spatial').replace(/\/$/, '');
+  const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || 'YOUR_API_KEY';
+  const API_ENDPOINTS = {
+    buildings: `${SPATIAL_API_BASE}/geojson/buildings`,
+    roads: `${SPATIAL_API_BASE}/geojson/roads`,
+    footpaths: `${SPATIAL_API_BASE}/geojson/footpaths`,
+    vegetation: `${SPATIAL_API_BASE}/geojson/vegetation`,
+    parking: `${SPATIAL_API_BASE}/geojson/parking`,
+    solid_waste: `${SPATIAL_API_BASE}/geojson/solid-waste`,
+    electricity: `${SPATIAL_API_BASE}/geojson/electricity`,
+    water_supply: `${SPATIAL_API_BASE}/geojson/water-supply`,
+    drainage: `${SPATIAL_API_BASE}/geojson/drainage`,
+    vimbweta: `${SPATIAL_API_BASE}/geojson/vimbweta`,
+    security: `${SPATIAL_API_BASE}/geojson/security`,
+    recreational_areas: `${SPATIAL_API_BASE}/geojson/recreational-areas`,
+    aru_boundary: `${SPATIAL_API_BASE}/geojson/aru-boundary`
   };
 
   const layerColors = {
@@ -1067,7 +1636,188 @@ const MapView = () => {
     aru_boundary: '#000000'
   };
 
-  const OPENWEATHER_API_KEY = "YOUR_API_KEY";
+  const getLayerColor = useCallback((layer) => {
+    return customColors[layer] || layerColors[layer];
+  }, [customColors]);
+
+  const validateEndpoints = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const endpoints = {};
+    for (const [key, url] of Object.entries(API_ENDPOINTS)) {
+      try {
+        await axios.head(url, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          timeout: 5000
+        });
+        endpoints[key] = true;
+      } catch {
+        endpoints[key] = false;
+      }
+    }
+    setAvailableEndpoints(endpoints);
+  };
+
+  const fetchGeoByBbox = useCallback(
+    debounce(async (layers, bounds, simplify = 0.0001) => {
+      if (!layers || layers.size === 0 || !bounds) return;
+      
+      const token = localStorage.getItem('token');
+      if (!token || !checkTokenValidity(token)) {
+        setError('Session expired. Please login again.');
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+
+      const key = `${Array.from(layers).join('-')}-${bounds.getWest().toFixed(6)}-${bounds.getSouth().toFixed(6)}-${bounds.getEast().toFixed(6)}-${bounds.getNorth().toFixed(6)}`;
+      if (lastBoundsKeyRef.current === key) return;
+      lastBoundsKeyRef.current = key;
+
+      try {
+        setLoading(true);
+        setLoadingLayers(prev => new Set([...prev, ...layers]));
+        const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+        const newSpatialData = { ...spatialData };
+
+        for (const layer of layers) {
+          if (availableEndpoints[layer] === false) {
+            newSpatialData[layer] = [];
+            continue;
+          }
+
+          try {
+            const cacheKey = `${layer}-${bbox}-${simplify}`;
+            if (spatialDataCache.current.has(cacheKey)) {
+              newSpatialData[layer] = spatialDataCache.current.get(cacheKey);
+              continue;
+            }
+
+            const url = API_ENDPOINTS[layer];
+            const resp = await fetchWithRetry(url, {
+              headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              params: { bbox, simplify },
+            }, 2, 30000);
+
+            const fc = resp.data || { type: 'FeatureCollection', features: [] };
+            newSpatialData[layer] = Array.isArray(fc.features) ? fc.features : [];
+            spatialDataCache.current.set(cacheKey, newSpatialData[layer]);
+            
+            setFailedLayers(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(layer);
+              return newSet;
+            });
+          } catch (err) {
+            newSpatialData[layer] = [];
+            setFailedLayers(prev => new Set([...prev, layer]));
+            if (err.response?.status === 401) {
+              setError('Authentication failed. Please login again.');
+              localStorage.removeItem('token');
+              navigate('/login');
+              break;
+            }
+          }
+        }
+
+        setSpatialData(newSpatialData);
+        spatialCache.set(newSpatialData);
+      } catch (err) {
+        setError('Failed to load features for current view');
+      } finally {
+        setLoading(false);
+        setLoadingLayers(new Set());
+      }
+    }, 800),
+    [navigate, spatialData, availableEndpoints]
+  );
+
+  const handleLayerToggle = (layerKey) => {
+    if (availableEndpoints[layerKey] === false) {
+      setError(`Layer "${layerKey}" is not available on the server`);
+      return;
+    }
+
+    setSelectedLayers(prev => {
+      const newLayers = new Set(prev);
+      if (newLayers.has(layerKey)) {
+        newLayers.delete(layerKey);
+      } else {
+        newLayers.add(layerKey);
+      }
+      return newLayers;
+    });
+  };
+
+  const toggleSection = (section) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  const exportData = async (format = 'geojson') => {
+    setIsExporting(true);
+    setExportProgress(0);
+    try {
+      const dataToExport = Object.keys(filteredFeatures).length > 0 ? filteredFeatures : spatialData;
+      const blob = new Blob([JSON.stringify(dataToExport)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `map-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportProgress(100);
+    } catch (error) {
+      setError('Export failed: ' + error.message);
+    } finally {
+      setTimeout(() => {
+        setIsExporting(false);
+        setExportProgress(0);
+      }, 1000);
+    }
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !checkTokenValidity(token)) {
+      setError('Session expired. Please login again.');
+      localStorage.removeItem('token');
+      navigate('/login');
+      return;
+    }
+
+    const cachedData = spatialCache.get();
+    if (cachedData) setSpatialData(cachedData);
+
+    const savedColors = colorCache.get();
+    if (savedColors) setCustomColors(savedColors);
+
+    validateEndpoints();
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!searchQuery) {
+      setFilteredFeatures({});
+      return;
+    }
+
+    const filtered = {};
+    Object.entries(spatialData).forEach(([layer, features]) => {
+      filtered[layer] = features.filter(feature => 
+        feature.properties && 
+        Object.values(feature.properties).some(value => 
+          value && value.toString().toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      );
+    });
+    setFilteredFeatures(filtered);
+  }, [searchQuery, spatialData]);
 
   // Styles
   const containerStyle = {
@@ -1162,6 +1912,16 @@ const MapView = () => {
     borderRadius: '3px'
   };
 
+  const buttonStyle = {
+    padding: '8px 12px',
+    margin: '4px 0',
+    width: '100%',
+    borderRadius: '4px',
+    border: 'none',
+    color: '#fff',
+    cursor: 'pointer'
+  };
+
   return (
     <div style={containerStyle}>
       <div style={sidebarStyle}>
@@ -1170,9 +1930,9 @@ const MapView = () => {
             <i className="fas fa-map" style={{ marginRight: '10px' }}></i>
             GeoMap Manager
           </h1>
-          <p style={{ fontSize: '0.9rem', color: '#ecf0f1' }}>Advanced mapping interface with layer control</p>
+          <p style={{ fontSize: '0.9rem', color: '#ecf0f1' }}>Advanced mapping interface</p>
         </div>
-        
+
         <div style={searchBoxStyle}>
           <input
             type="text"
@@ -1182,7 +1942,22 @@ const MapView = () => {
             style={inputStyle}
           />
         </div>
-        
+
+        {error && (
+          <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#d32f2f' }}>
+            {error}
+          </div>
+        )}
+
+        {failedLayers.size > 0 && (
+          <div style={{ padding: '10px', backgroundColor: '#fff3cd', color: '#856404' }}>
+            Failed to load: {Array.from(failedLayers).join(', ')}
+            <button onClick={() => setSelectedLayers(new Set([...selectedLayers, ...failedLayers]))} style={{ ...buttonStyle, backgroundColor: '#ffc107' }}>
+              Retry Failed Layers
+            </button>
+          </div>
+        )}
+
         <div style={layersContainerStyle}>
           {/* Landbase Layers Section */}
           <div style={sectionHeaderStyle} onClick={() => toggleSection('landbase')}>
@@ -1192,7 +1967,7 @@ const MapView = () => {
             </h3>
             <i className={`fas fa-chevron-${collapsedSections.landbase ? 'down' : 'up'}`}></i>
           </div>
-          
+
           {!collapsedSections.landbase && (
             <div>
               {[
@@ -1223,6 +1998,7 @@ const MapView = () => {
                     checked={selectedLayers.has(layer.key)}
                     onChange={() => {}}
                     style={{ marginRight: '10px' }}
+                    disabled={availableEndpoints[layer.key] === false}
                   />
                   <div style={{
                     width: '20px',
@@ -1236,12 +2012,15 @@ const MapView = () => {
                   }}>
                     <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
                   </div>
-                  <span style={{ fontSize: '14px' }}>{layer.label}</span>
+                  <span style={{ fontSize: '14px' }}>
+                    {layer.label}
+                    {loadingLayers.has(layer.key) && ' ⏳'}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-          
+
           {/* Base Layers Section */}
           <div style={sectionHeaderStyle} onClick={() => toggleSection('base')}>
             <h3 style={sectionTitleStyle}>
@@ -1250,7 +2029,7 @@ const MapView = () => {
             </h3>
             <i className={`fas fa-chevron-${collapsedSections.base ? 'down' : 'up'}`}></i>
           </div>
-          
+
           {!collapsedSections.base && (
             <div>
               {[
@@ -1261,10 +2040,7 @@ const MapView = () => {
                 { key: 'google_hybrid', label: 'Google Hybrid', icon: 'layer-group' },
                 { key: 'nasa_gibs', label: 'NASA GIBS', icon: 'globe-americas' }
               ].map(layer => (
-                <div
-                  key={layer.key}
-                  style={layerItemStyle}
-                >
+                <div key={layer.key} style={layerItemStyle}>
                   <input
                     type="radio"
                     name="baseLayer"
@@ -1288,7 +2064,7 @@ const MapView = () => {
               ))}
             </div>
           )}
-          
+
           {/* Weather Overlays Section */}
           <div style={sectionHeaderStyle} onClick={() => toggleSection('weather')}>
             <h3 style={sectionTitleStyle}>
@@ -1297,7 +2073,7 @@ const MapView = () => {
             </h3>
             <i className={`fas fa-chevron-${collapsedSections.weather ? 'down' : 'up'}`}></i>
           </div>
-          
+
           {!collapsedSections.weather && (
             <div>
               {[
@@ -1306,14 +2082,8 @@ const MapView = () => {
                 { key: 'temperature', label: 'Temperature', icon: 'thermometer-half' },
                 { key: 'wind', label: 'Wind', icon: 'wind' }
               ].map(layer => (
-                <div
-                  key={layer.key}
-                  style={layerItemStyle}
-                >
-                  <input
-                    type="checkbox"
-                    style={{ marginRight: '10px' }}
-                  />
+                <div key={layer.key} style={layerItemStyle}>
+                  <input type="checkbox" style={{ marginRight: '10px' }} />
                   <div style={{
                     width: '20px',
                     height: '20px',
@@ -1331,7 +2101,7 @@ const MapView = () => {
               ))}
             </div>
           )}
-          
+
           {/* Legend Section */}
           <div style={sectionHeaderStyle} onClick={() => toggleSection('legend')}>
             <h3 style={sectionTitleStyle}>
@@ -1340,37 +2110,49 @@ const MapView = () => {
             </h3>
             <i className={`fas fa-chevron-${collapsedSections.legend ? 'down' : 'up'}`}></i>
           </div>
-          
+
           {!collapsedSections.legend && (
             <div style={{ backgroundColor: '#2c3e50', padding: '10px', borderRadius: '4px' }}>
               {Object.entries(layerColors).map(([layer, color]) => (
                 <div key={layer} style={legendItemStyle}>
-                  <div style={{ ...colorBoxStyle, backgroundColor: color }}></div>
+                  <div style={{ ...colorBoxStyle, backgroundColor: getLayerColor(layer) }}></div>
                   <span style={{ fontSize: '13px' }}>{layer.replace(/_/g, ' ')}</span>
                 </div>
               ))}
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#3498db' }}></div>
-                <span style={{ fontSize: '13px' }}>Water Bodies</span>
-              </div>
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#27ae60' }}></div>
-                <span style={{ fontSize: '13px' }}>Vegetation</span>
-              </div>
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#c0392b' }}></div>
-                <span style={{ fontSize: '13px' }}>Residential Areas</span>
-              </div>
             </div>
           )}
+
+          <div style={{ padding: '10px' }}>
+            <button
+              style={{ ...buttonStyle, backgroundColor: '#28a745' }}
+              onClick={() => exportData('geojson')}
+              disabled={isExporting}
+            >
+              {isExporting ? `Exporting... ${exportProgress}%` : 'Export GeoJSON'}
+            </button>
+            <button
+              style={{ ...buttonStyle, backgroundColor: '#dc3545' }}
+              onClick={() => {
+                localStorage.removeItem('token');
+                navigate('/login');
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
-      
+
       <div style={mapContainerStyle}>
         <MapContainer
-          center={[51.505, -0.09]}
+          center={[-6.764538, 39.214464]}
           zoom={13}
           style={{ width: '100%', height: '100%' }}
+          whenReady={(map) => {
+            map.target.on('moveend', () => {
+              fetchGeoByBbox(selectedLayers, map.target.getBounds());
+            });
+          }}
         >
           <LayersControl position="topright">
             <LayersControl.BaseLayer checked name="OpenStreetMap">
@@ -1415,7 +2197,6 @@ const MapView = () => {
               />
             </LayersControl.BaseLayer>
 
-            {/* Weather Overlays */}
             <LayersControl.Overlay name="Weather - Clouds">
               <TileLayer
                 url={`https://tile.openweathermap.org/map/clouds/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
@@ -1448,14 +2229,13 @@ const MapView = () => {
               />
             </LayersControl.Overlay>
 
-            {/* Render selected spatial data layers */}
             {Object.entries(spatialData).map(([layer, data]) => (
               selectedLayers.has(layer) && (
                 <LayersControl.Overlay key={layer} name={layer} checked>
                   <GeoJSON
-                    data={data}
+                    data={filteredFeatures[layer] || data}
                     style={{
-                      color: layerColors[layer] || '#000',
+                      color: getLayerColor(layer),
                       weight: 2,
                       opacity: 0.7,
                       fillOpacity: 0.5
