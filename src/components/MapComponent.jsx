@@ -209,9 +209,7 @@
 //     </MapContainer>
 //   );
 // }
-
-
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -257,29 +255,25 @@ function MapEvents({ onBoundsChange, onMapClick }) {
 }
 
 // ------------------------
-// Enhanced MapComponent
+// MapComponent
 // ------------------------
 export default function MapComponent({
   spatialData,
   initialCenter,
   onBoundsChange,
   layerColors,
-  highlightedFeatures = {},
   searchQuery = "",
   onMapClick,
   isLoading = false,
-  mapStyle = { width: "100%", height: "100%" }
 }) {
-  const OPENWEATHER_API_KEY = "YOUR_API_KEY"; // Replace with your OpenWeather API key
+  const OPENWEATHER_API_KEY = "YOUR_API_KEY";
   const [currentBaseLayer, setCurrentBaseLayer] = useState("OpenStreetMap");
-  const [currentWeatherLayer, setCurrentWeatherLayer] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
-  const [clickedPosition, setClickedPosition] = useState(null);
   const mapRef = useRef();
 
   // Filter features based on search query
   const filterFeatures = (features) => {
-    if (!searchQuery) return features;
+    if (!searchQuery || !features) return features;
     
     return features.filter(feature => 
       feature.properties && 
@@ -291,7 +285,6 @@ export default function MapComponent({
 
   // Handle map click
   const handleMapClick = (latlng) => {
-    setClickedPosition(latlng);
     if (onMapClick) {
       onMapClick(latlng);
     }
@@ -305,7 +298,6 @@ export default function MapComponent({
           const { latitude, longitude } = position.coords;
           setUserLocation([latitude, longitude]);
           
-          // Center map on user's location
           if (mapRef.current) {
             mapRef.current.setView([latitude, longitude], 16);
           }
@@ -320,7 +312,7 @@ export default function MapComponent({
   // Custom style function for GeoJSON features
   const styleFeature = (feature, layer) => {
     const layerKey = Object.keys(spatialData).find(key => 
-      spatialData[key] && spatialData[key].features.includes(feature)
+      spatialData[key] && spatialData[key].features && spatialData[key].features.includes(feature)
     );
     
     const baseStyle = {
@@ -350,40 +342,17 @@ export default function MapComponent({
     return baseStyle;
   };
 
-  // Effect to handle base layer changes
-  useEffect(() => {
-    // You can add logic here when base layer changes
-    console.log("Base layer changed to:", currentBaseLayer);
-  }, [currentBaseLayer]);
-
-  // Custom control for layer information
-  const InfoControl = () => {
-    const map = useMapEvents({});
-    
-    return (
-      <div className="leaflet-control leaflet-bar" style={{
-        backgroundColor: 'white',
-        padding: '5px 10px',
-        fontSize: '12px',
-        borderRadius: '4px',
-        boxShadow: '0 1px 5px rgba(0,0,0,0.4)'
-      }}>
-        {isLoading ? 'Loading data...' : 'Ready'}
-      </div>
-    );
-  };
-
   return (
     <MapContainer
       center={initialCenter}
       zoom={16}
-      style={mapStyle}
+      style={{ width: "100%", height: "100%" }}
       zoomControl={false}
       ref={mapRef}
     >
       <LayersControl position="topright">
-        {/* --- Base Layers --- */}
-        <BaseLayer 
+        {/* Base Layers */}
+        <LayersControl.BaseLayer 
           checked 
           name="OpenStreetMap"
           onAdd={() => setCurrentBaseLayer("OpenStreetMap")}
@@ -392,9 +361,9 @@ export default function MapComponent({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
-        </BaseLayer>
+        </LayersControl.BaseLayer>
 
-        <BaseLayer 
+        <LayersControl.BaseLayer 
           name="Carto Light"
           onAdd={() => setCurrentBaseLayer("Carto Light")}
         >
@@ -402,9 +371,9 @@ export default function MapComponent({
             url="https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.carto.com/">CARTO</a>'
           />
-        </BaseLayer>
+        </LayersControl.BaseLayer>
 
-        <BaseLayer 
+        <LayersControl.BaseLayer 
           name="Esri World Imagery"
           onAdd={() => setCurrentBaseLayer("Esri World Imagery")}
         >
@@ -412,9 +381,9 @@ export default function MapComponent({
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             attribution="Tiles © Esri"
           />
-        </BaseLayer>
+        </LayersControl.BaseLayer>
 
-        <BaseLayer 
+        <LayersControl.BaseLayer 
           name="Google Satellite"
           onAdd={() => setCurrentBaseLayer("Google Satellite")}
         >
@@ -422,9 +391,9 @@ export default function MapComponent({
             url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
             attribution="© Google"
           />
-        </BaseLayer>
+        </LayersControl.BaseLayer>
 
-        <BaseLayer 
+        <LayersControl.BaseLayer 
           name="Google Hybrid"
           onAdd={() => setCurrentBaseLayer("Google Hybrid")}
         >
@@ -432,9 +401,9 @@ export default function MapComponent({
             url="https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}"
             attribution="© Google"
           />
-        </BaseLayer>
+        </LayersControl.BaseLayer>
 
-        <BaseLayer 
+        <LayersControl.BaseLayer 
           name="NASA GIBS"
           onAdd={() => setCurrentBaseLayer("NASA GIBS")}
         >
@@ -442,68 +411,53 @@ export default function MapComponent({
             url="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2023-01-01/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg"
             attribution="Imagery © NASA EOSDIS GIBS"
           />
-        </BaseLayer>
+        </LayersControl.BaseLayer>
 
-        {/* --- Weather Overlays --- */}
-        <Overlay 
-          name="Weather - Clouds"
-          onAdd={() => setCurrentWeatherLayer("clouds")}
-          onRemove={() => setCurrentWeatherLayer(null)}
-        >
+        {/* Weather Overlays */}
+        <LayersControl.Overlay name="Weather - Clouds">
           <TileLayer
             url={`https://tile.openweathermap.org/map/clouds/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
-            attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
+            attribution='&copy; <a href="极狐 prompt 已截断，是否继续？](https://openweathermap.org/">OpenWeather</a>'
             opacity={0.6}
           />
-        </Overlay>
+        </LayersControl.Overlay>
 
-        <Overlay 
-          name="Weather - Precipitation"
-          onAdd={() => setCurrentWeatherLayer("precipitation")}
-          onRemove={() => setCurrentWeatherLayer(null)}
-        >
+        <LayersControl.Overlay name="Weather - Precipitation">
           <TileLayer
-            url={`https://tile.openweathermap.org/map/precipitation/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
+            url={`https://tile.openweathermap.org/map/precipitation/{极狐 prompt 已截断，是否继续？](z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
             attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
             opacity={0.6}
           />
-        </Overlay>
+        </LayersControl.Overlay>
 
-        <Overlay 
-          name="Weather - Temperature"
-          onAdd={() => setCurrentWeatherLayer("temperature")}
-          onRemove={() => setCurrentWeatherLayer(null)}
-        >
+        <LayersControl.Overlay name="Weather - Temperature">
           <TileLayer
             url={`https://tile.openweathermap.org/map/temp/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
             attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
             opacity={0.6}
           />
-        </Overlay>
+        </LayersControl.Overlay>
 
-        <Overlay 
-          name="Weather - Wind"
-          onAdd={() => setCurrentWeatherLayer("wind")}
-          onRemove={() => setCurrentWeatherLayer(null)}
-        >
+        <LayersControl.Overlay name="Weather - Wind">
           <TileLayer
             url={`https://tile.openweathermap.org/map/wind/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
-            attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
+            attribution='&copy; <a href="https://openweathermap.org/">极狐 prompt 已截断，是否继续？](OpenWeather</a>'
             opacity={0.6}
           />
-        </Overlay>
+        </LayersControl.Overlay>
 
-        {/* --- Vector Overlay Layers (spatialData) --- */}
-        {Object.entries(spatialData).map(([layer, features]) => {
-          const filteredFeatures = filterFeatures(features);
+        {/* Vector Overlay Layers */}
+        {Object.entries(spatialData).map(([layer, data]) => {
+          if (!data || !data.features) return null;
+          
+          const filteredFeatures = filterFeatures(data.features);
           
           return (
-            <Overlay key={layer} name={layer} checked>
+            <LayersControl.Overlay key={layer} name={layer} checked>
               <GeoJSON
                 data={{ type: "FeatureCollection", features: filteredFeatures }}
                 style={(feature) => styleFeature(feature, layer)}
                 pointToLayer={(feature, latlng) => {
-                  // Use custom icon for points
                   return L.marker(latlng, {
                     icon: createCustomIcon(layerColors?.[layer] || "#000")
                   });
@@ -516,12 +470,11 @@ export default function MapComponent({
                     layerInstance.bindPopup(popupContent);
                   }
                   
-                  // Add hover effects
                   layerInstance.on('mouseover', function () {
                     this.setStyle({
                       weight: 5,
                       opacity: 1,
-                      fillOpacity: 0.7
+                      fill极狐 prompt 已截断，是否继续？](Opacity: 0.7
                     });
                   });
                   
@@ -530,7 +483,7 @@ export default function MapComponent({
                   });
                 }}
               />
-            </Overlay>
+            </LayersControl.Overlay>
           );
         })}
       </LayersControl>
@@ -542,23 +495,9 @@ export default function MapComponent({
         </Marker>
       )}
 
-      {/* Show clicked position */}
-      {clickedPosition && (
-        <Marker position={clickedPosition}>
-          <Popup>
-            Clicked Position<br />
-            Lat: {clickedPosition.lat.toFixed(6)}<br />
-            Lng: {clickedPosition.lng.toFixed(6)}
-          </Popup>
-        </Marker>
-      )}
-
       {/* Map controls */}
       <ZoomControl position="bottomright" />
       <ScaleControl position="bottomleft" imperial={false} />
-      
-      {/* Custom info control */}
-      <InfoControl />
       
       {/* Map events handler */}
       <MapEvents onBoundsChange={onBoundsChange} onMapClick={handleMapClick} />
@@ -574,12 +513,12 @@ export default function MapComponent({
           padding: '8px 16px',
           borderRadius: '4px',
           zIndex: 1000,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          boxShadow: '0 2px 8px rgba(0,0,极狐 prompt 已截断，是否继续？](0,0.2)',
           display: 'flex',
           alignItems: 'center'
         }}>
           <div style={{
-            width: '16px',
+            width: '极狐 prompt 已截断，是否继续？](16px',
             height: '16px',
             border: '2px solid #f3f3f3',
             borderTop: '2px solid #3498db',
