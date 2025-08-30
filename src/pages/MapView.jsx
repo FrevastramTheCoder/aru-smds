@@ -2305,10 +2305,12 @@ const fetchWithRetry = async (url, options, maxRetries = 3, timeout = 45000) => 
       }
       if (error.response?.status === 429) {
         const retryAfter = error.response.headers['retry-after'] || 5;
+        console.warn(`Rate limited. Retrying after ${retryAfter} seconds...`);
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
         continue;
       }
       if (i === maxRetries - 1) throw error;
+      console.warn(`Attempt ${i + 1} failed, retrying...`);
       await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
     }
   }
@@ -2427,6 +2429,7 @@ const MapView = () => {
   const [mapStats, setMapStats] = useState({});
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState({});
+  const [selectedFeature, setSelectedFeature] = useState(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -2451,6 +2454,22 @@ const MapView = () => {
     security: `${SPATIAL_API_BASE}/geojson/security`,
     recreational_areas: `${SPATIAL_API_BASE}/geojson/recreational-areas`,
     aru_boundary: `${SPATIAL_API_BASE}/geojson/aru-boundary`
+  };
+
+  const categoryToTypeMap = {
+    buildings: 'buildings',
+    roads: 'roads',
+    footpaths: 'footpaths',
+    vegetation: 'vegetation',
+    parking: 'parking',
+    'solid-waste': 'solid_waste',
+    electricity: 'electricity',
+    'water-supply': 'water_supply',
+    'drainage-system': 'drainage',
+    vimbweta: 'vimbweta',
+    'security-lights': 'security',
+    'recreational-areas': 'recreational_areas',
+    'aru-boundary': 'aru_boundary'
   };
 
   const layerColors = {
@@ -2503,6 +2522,7 @@ const MapView = () => {
         endpoints[key] = true;
       } catch {
         endpoints[key] = false;
+        console.warn(`Endpoint not available: ${key}`);
       }
     }
     setAvailableEndpoints(endpoints);
@@ -2534,6 +2554,7 @@ const MapView = () => {
 
         for (const layer of layers) {
           if (availableEndpoints[layer] === false) {
+            console.warn(`Skipping ${layer} - endpoint not available`);
             newSpatialData[layer] = [];
             continue;
           }
@@ -2570,6 +2591,7 @@ const MapView = () => {
               return newSet;
             });
           } catch (err) {
+            console.error(`Error fetching geojson for ${layer}:`, err);
             newSpatialData[layer] = [];
             setFailedLayers(prev => new Set([...prev, layer]));
             if (err.response?.status === 401) {
@@ -2586,6 +2608,7 @@ const MapView = () => {
         setSpatialData(newSpatialData);
         spatialCache.set(newSpatialData);
       } catch (err) {
+        console.error('Error fetching geojson by bbox:', err);
         setError('Failed to load features for current view');
       } finally {
         setLoading(false);
@@ -2673,6 +2696,7 @@ const MapView = () => {
       }
       setExportProgress(100);
     } catch (error) {
+      console.error('Export failed:', err);
       setError('Export failed: ' + error.message);
     } finally {
       setTimeout(() => {
@@ -2705,6 +2729,19 @@ const MapView = () => {
     setSearchQuery('');
   };
 
+  const handleFeatureClick = useCallback((feature) => {
+    setSelectedFeature(feature);
+  }, []);
+
+  const retryFailedLayers = () => {
+    if (failedLayers.size === 0) return;
+    
+    setSelectedLayers(prev => {
+      const newLayers = new Set([...prev, ...failedLayers]);
+      return newLayers;
+    });
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token || !checkTokenValidity(token)) {
@@ -2715,34 +2752,27 @@ const MapView = () => {
     }
 
     const cachedData = spatialCache.get();
-    if (cachedData) setSpatialData(cachedData);
+    if (cachedData) {
+      setSpatialData(cachedData);
+    }
 
     const savedColors = colorCache.get();
-    if (savedColors) setCustomColors(savedColors);
+    if (savedColors) {
+      setCustomColors(savedColors);
+    }
 
     validateEndpoints();
 
     const params = new URLSearchParams(location.search);
     const category = params.get('category');
-    const type = category ? (Object.entries({
-      buildings: 'buildings',
-      roads: 'roads',
-      footpaths: 'footpaths',
-      vegetation: 'vegetation',
-      parking: 'parking',
-      'solid-waste': 'solid_waste',
-      electricity: 'electricity',
-      'water-supply': 'water_supply',
-      'drainage-system': 'drainage',
-      vimbweta: 'vimbweta',
-      'security-lights': 'security',
-      'recreational-areas': 'recreational_areas',
-      'aru-boundary': 'aru_boundary'
-    }).find(([k, v]) => k === category)?.[1] || 'buildings') : 'buildings';
+    const type = category ? (categoryToTypeMap[category] || 'buildings') : 'buildings';
     
     if (availableEndpoints[type] !== false) {
       setSelectedType(type);
       setSelectedLayers(new Set([type]));
+    } else {
+      setSelectedType('buildings');
+      setSelectedLayers(new Set(['buildings']));
     }
   }, [navigate, location, availableEndpoints]);
 
@@ -2792,6 +2822,82 @@ const MapView = () => {
     });
     setFilteredFeatures(filtered);
   }, [searchQuery, activeFilters, spatialData]);
+
+  // Initial full-layer fetch
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !checkTokenValidity(token)) {
+      navigate('/login');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    (async () => {
+      try {
+        setLoadingLayers(new Set([...selectedLayers]));
+        const newSpatialData = { ...spatialData };
+
+        for (const layer of selectedLayers) {
+          if (availableEndpoints[layer] === false) {
+            console.warn(`Skipping ${layer} - endpoint not available`);
+            newSpatialData[layer] = [];
+            continue;
+          }
+
+          try {
+            const url = API_ENDPOINTS[layer];
+            const resp = await fetchWithRetry(url, {
+              headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              params: { simplify: 0.00001 },
+            }, 2, 30000);
+
+            const fc = resp.data || { type: 'FeatureCollection', features: [] };
+            const features = Array.isArray(fc.features) ? fc.features : [];
+            
+            newSpatialData[layer] = features.map(feature => {
+              if (feature.geometry && feature.geometry.type === 'Polygon') {
+                return ensurePolygonWindingOrder(feature);
+              }
+              return feature;
+            });
+            
+            setFailedLayers(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(layer);
+              return newSet;
+            });
+          } catch (err) {
+            console.warn(`Initial fetch failed for ${layer}:`, err);
+            newSpatialData[layer] = [];
+            
+            setFailedLayers(prev => new Set([...prev, layer]));
+            
+            if (err.response?.status === 401) {
+              setError('Authentication failed. Please login again.');
+              localStorage.removeItem('token');
+              navigate('/login');
+              break;
+            } else if (err.response?.status === 404) {
+              setAvailableEndpoints(prev => ({ ...prev, [layer]: false }));
+            }
+          }
+        }
+
+        setSpatialData(newSpatialData);
+        spatialCache.set(newSpatialData);
+      } catch (err) {
+        console.warn('Initial layer fetch failed:', err);
+      } finally {
+        setLoading(false);
+        setLoadingLayers(new Set());
+      }
+    })();
+  }, [selectedLayers, navigate]);
 
   const containerStyle = {
     display: 'flex',
@@ -2934,10 +3040,38 @@ const MapView = () => {
           <div style={{ padding: '10px', backgroundColor: '#fff3cd', color: '#856404' }}>
             Failed to load: {Array.from(failedLayers).join(', ')}
             <button 
-              onClick={() => setSelectedLayers(new Set([...selectedLayers, ...failedLayers]))} 
+              onClick={retryFailedLayers}
               style={{ ...buttonStyle, backgroundColor: '#ffc107' }}
             >
               Retry Failed Layers
+            </button>
+          </div>
+        )}
+
+        {selectedFeature && (
+          <div style={{ 
+            padding: '10px', 
+            backgroundColor: '#2c3e50', 
+            borderRadius: '4px',
+            margin: '10px'
+          }}>
+            <h4 style={{ color: '#3498db', margin: '0 0 8px 0' }}>
+              Selected Feature
+            </h4>
+            {Object.entries(selectedFeature.properties || {}).map(([key, value]) => (
+              <div key={key} style={{ fontSize: '12px', marginBottom: '4px' }}>
+                <strong>{key}:</strong> {value}
+              </div>
+            ))}
+            <button
+              style={{ 
+                ...buttonStyle, 
+                backgroundColor: '#6c757d',
+                marginTop: '8px'
+              }}
+              onClick={() => setSelectedFeature(null)}
+            >
+              Clear Selection
             </button>
           </div>
         )}
@@ -3011,6 +3145,7 @@ const MapView = () => {
                       {layer.label}
                       {loadingLayers.has(layer.key) && ' ⏳'}
                       {mapStats[layer.key] && ` (${mapStats[layer.key].count})`}
+                      {availableEndpoints[layer.key] === false && ' (Not Available)'}
                     </span>
                   </div>
                   <div style={{ marginLeft: '24px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3280,21 +3415,40 @@ const MapView = () => {
 
             {Object.entries(displayData).map(([layer, data]) => (
               selectedLayers.has(layer) && (
-                <LayersControl.Overlay key={layer} name={layer} checked>
+                <LayersControl.Overlay key={layer} name={layer.replace(/_/g, ' ').toUpperCase()} checked>
                   <GeoJSON
-                    data={data}
-                    style={{
+                    data={{ type: 'FeatureCollection', features: data }}
+                    style={() => ({
                       color: getLayerColor(layer),
                       weight: 2,
                       opacity: 0.7,
                       fillOpacity: 0.5
-                    }}
-                    onEachFeature={(feature, layer) => {
+                    })}
+                    pointToLayer={(feature, latlng) => 
+                      L.circleMarker(latlng, {
+                        radius: 5,
+                        fillColor: getLayerColor(layer),
+                        color: '#000',
+                        weight: 1,
+                        fillOpacity: 0.8,
+                      })
+                    }
+                    onEachFeature={(feature, layerInstance) => {
                       if (feature.properties) {
-                        const popupContent = Object.entries(feature.properties)
-                          .map(([key, value]) => `<b>${key}:</b> ${value}`)
-                          .join('<br>');
-                        layer.bindPopup(popupContent);
+                        const popupContent = `
+                          <div style="min-width: 200px; max-width: 300px; font-size: 12px;">
+                            <h4 style="margin: 0 0 8px 0; color: #2c3e50;">${layer.replace(/_/g, ' ').toUpperCase()}</h4>
+                            ${Object.entries(feature.properties)
+                              .map(([k, v]) => `<b style="color: #34495e;">${k}:</b> ${v}`)
+                              .join('<br>')}
+                          </div>`;
+                        layerInstance.bindPopup(popupContent);
+                        
+                        layerInstance.on({
+                          click: () => {
+                            handleFeatureClick(feature);
+                          }
+                        });
                       }
                     }}
                   />
