@@ -1487,7 +1487,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import MapComponent from "./components/MapComponent";
+import MapComponent from "../components/MapComponent";
 
 // ------------------------
 // Helper Functions
