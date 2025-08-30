@@ -7133,7 +7133,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, LayersControl, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import io from 'socket.io-client';
 import 'leaflet/dist/leaflet.css';
 import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
