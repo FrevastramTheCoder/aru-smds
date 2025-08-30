@@ -3615,6 +3615,7 @@ const MapView = () => {
   const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
   const [selectedBaseLayer, setSelectedBaseLayer] = useState('openstreetmap');
   const [collapsedSections, setCollapsedSections] = useState({
+    layers: false,
     landbase: false,
     base: false,
     weather: false,
@@ -3717,6 +3718,13 @@ const MapView = () => {
     { key: 'nasa_gibs', label: 'NASA GIBS', icon: 'globe-americas', url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2023-01-01/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg', attribution: 'Imagery © NASA EOSDIS GIBS' }
   ];
 
+  const weatherLayers = [
+    { key: 'clouds', label: 'Clouds', icon: 'cloud', url: `https://tile.openweathermap.org/map/clouds/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`, attribution: '&copy; <a href="https://openweathermap.org/">OpenWeather</a>' },
+    { key: 'precipitation', label: 'Precipitation', icon: 'cloud-rain', url: `https://tile.openweathermap.org/map/precipitation/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`, attribution: '&copy; <a href="https://openweathermap.org/">OpenWeather</a>' },
+    { key: 'temperature', label: 'Temperature', icon: 'thermometer-half', url: `https://tile.openweathermap.org/map/temp/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`, attribution: '&copy; <a href="https://openweathermap.org/">OpenWeather</a>' },
+    { key: 'wind', label: 'Wind', icon: 'wind', url: `https://tile.openweathermap.org/map/wind/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`, attribution: '&copy; <a href="https://openweathermap.org/">OpenWeather</a>' }
+  ];
+
   const getLayerColor = useCallback((layer) => {
     return customColors[layer] || layerColors[layer];
   }, [customColors]);
@@ -3766,7 +3774,7 @@ const MapView = () => {
         const newSpatialData = { ...spatialData };
 
         for (const layer of layers) {
-          if (availableEndpoints[layer] === false) {
+          if (!API_ENDPOINTS[layer] || availableEndpoints[layer] === false) {
             console.warn(`Skipping ${layer} - endpoint not available`);
             newSpatialData[layer] = [];
             continue;
@@ -3861,6 +3869,18 @@ const MapView = () => {
 
   const handleBaseLayerSelect = (layerKey) => {
     setSelectedBaseLayer(layerKey);
+  };
+
+  const handleWeatherLayerToggle = (layerKey) => {
+    setSelectedLayers(prev => {
+      const newLayers = new Set(prev);
+      if (newLayers.has(layerKey)) {
+        newLayers.delete(layerKey);
+      } else {
+        newLayers.add(layerKey);
+      }
+      return newLayers;
+    });
   };
 
   const handleColorChange = useCallback((layer, color) => {
@@ -4057,7 +4077,7 @@ const MapView = () => {
         const newSpatialData = { ...spatialData };
 
         for (const layer of selectedLayers) {
-          if (availableEndpoints[layer] === false) {
+          if (!API_ENDPOINTS[layer] || availableEndpoints[layer] === false) {
             console.warn(`Skipping ${layer} - endpoint not available`);
             newSpatialData[layer] = [];
             continue;
@@ -4169,6 +4189,12 @@ const MapView = () => {
     borderRadius: '4px',
     margin: '10px 0',
     cursor: 'pointer'
+  };
+
+  const subsectionHeaderStyle = {
+    ...sectionHeaderStyle,
+    marginLeft: '10px',
+    backgroundColor: '#34495e'
   };
 
   const sectionTitleStyle = {
@@ -4320,156 +4346,168 @@ const MapView = () => {
             </div>
           )}
 
-          <div style={sectionHeaderStyle} onClick={() => toggleSection('landbase')}>
+          <div style={sectionHeaderStyle} onClick={() => toggleSection('layers')}>
             <h3 style={sectionTitleStyle}>
               <i className="fas fa-layer-group" style={{ marginRight: '10px', color: '#3498db' }}></i>
-              Landbase Layers
+              Layers
             </h3>
-            <i className={`fas fa-angle-${collapsedSections.landbase ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+            <i className={`fas fa-angle-${collapsedSections.layers ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
           </div>
 
-          {!collapsedSections.landbase && (
+          {!collapsedSections.layers && (
             <div>
-              {dataTypes.map(layer => (
-                <div key={layer.key}>
-                  <div
-                    style={{
-                      ...layerItemStyle,
-                      backgroundColor: selectedLayers.has(layer.key) ? '#2980b9' : '#34495e'
-                    }}
-                    onClick={() => handleLayerToggle(layer.key)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedLayers.has(layer.key)}
-                      onChange={() => {}}
-                      style={checkboxStyle}
-                      disabled={availableEndpoints[layer.key] === false}
-                    />
-                    <div style={{
-                      width: '20px',
-                      height: '20px',
-                      marginRight: '10px',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      backgroundColor: '#2c3e50',
-                      borderRadius: '4px'
-                    }}>
-                      <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+              <div style={subsectionHeaderStyle} onClick={() => toggleSection('landbase')}>
+                <h4 style={sectionTitleStyle}>
+                  <i className="fas fa-layer-group" style={{ marginRight: '10px', color: '#3498db' }}></i>
+                  Landbase Layers
+                </h4>
+                <i className={`fas fa-angle-${collapsedSections.landbase ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+              </div>
+
+              {!collapsedSections.landbase && (
+                <div>
+                  {dataTypes.map(layer => (
+                    <div key={layer.key}>
+                      <div
+                        style={{
+                          ...layerItemStyle,
+                          backgroundColor: selectedLayers.has(layer.key) ? '#2980b9' : '#34495e'
+                        }}
+                        onClick={() => handleLayerToggle(layer.key)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedLayers.has(layer.key)}
+                          onChange={() => {}}
+                          style={checkboxStyle}
+                          disabled={availableEndpoints[layer.key] === false}
+                        />
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          marginRight: '10px',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          backgroundColor: '#2c3e50',
+                          borderRadius: '4px'
+                        }}>
+                          <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+                        </div>
+                        <span style={{ fontSize: '14px' }}>
+                          {layer.label}
+                          {loadingLayers.has(layer.key) && ' ⏳'}
+                          {mapStats[layer.key] && ` (${mapStats[layer.key].count})`}
+                          {availableEndpoints[layer.key] === false && ' (Not Available)'}
+                        </span>
+                      </div>
+                      <div style={{ marginLeft: '24px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="color"
+                          value={getLayerColor(layer.key)}
+                          onChange={(e) => handleColorChange(layer.key, e.target.value)}
+                          style={{ width: '30px', height: '20px', padding: '0', border: 'none' }}
+                          disabled={availableEndpoints[layer.key] === false}
+                        />
+                        <button
+                          onClick={() => resetColor(layer.key)}
+                          style={{
+                            padding: '2px 8px',
+                            fontSize: '12px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                          disabled={availableEndpoints[layer.key] === false || !customColors[layer.key]}
+                        >
+                          Reset
+                        </button>
+                      </div>
                     </div>
-                    <span style={{ fontSize: '14px' }}>
-                      {layer.label}
-                      {loadingLayers.has(layer.key) && ' ⏳'}
-                      {mapStats[layer.key] && ` (${mapStats[layer.key].count})`}
-                      {availableEndpoints[layer.key] === false && ' (Not Available)'}
-                    </span>
-                  </div>
-                  <div style={{ marginLeft: '24px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      type="color"
-                      value={getLayerColor(layer.key)}
-                      onChange={(e) => handleColorChange(layer.key, e.target.value)}
-                      style={{ width: '30px', height: '20px', padding: '0', border: 'none' }}
-                      disabled={availableEndpoints[layer.key] === false}
-                    />
-                    <button
-                      onClick={() => resetColor(layer.key)}
-                      style={{
-                        padding: '2px 8px',
-                        fontSize: '12px',
-                        backgroundColor: '#6c757d',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                      disabled={availableEndpoints[layer.key] === false || !customColors[layer.key]}
+                  ))}
+                </div>
+              )}
+
+              <div style={subsectionHeaderStyle} onClick={() => toggleSection('base')}>
+                <h4 style={sectionTitleStyle}>
+                  <i className="fas fa-globe" style={{ marginRight: '10px', color: '#3498db' }}></i>
+                  Base Layers
+                </h4>
+                <i className={`fas fa-angle-${collapsedSections.base ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+              </div>
+
+              {!collapsedSections.base && (
+                <div>
+                  {baseLayers.map(layer => (
+                    <div key={layer.key} 
+                         style={{
+                           ...layerItemStyle,
+                           backgroundColor: selectedBaseLayer === layer.key ? '#2980b9' : '#34495e'
+                         }}
+                         onClick={() => handleBaseLayerSelect(layer.key)}
                     >
-                      Reset
-                    </button>
-                  </div>
+                      <input
+                        type="radio"
+                        name="baseLayer"
+                        checked={selectedBaseLayer === layer.key}
+                        onChange={() => handleBaseLayerSelect(layer.key)}
+                        style={checkboxStyle}
+                      />
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        marginRight: '10px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        backgroundColor: '#2c3e50',
+                        borderRadius: '4px'
+                      }}>
+                        <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+                      </div>
+                      <span style={{ fontSize: '14px' }}>{layer.label}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          <div style={sectionHeaderStyle} onClick={() => toggleSection('base')}>
-            <h3 style={sectionTitleStyle}>
-              <i className="fas fa-globe" style={{ marginRight: '10px', color: '#3498db' }}></i>
-              Base Layers
-            </h3>
-            <i className={`fas fa-angle-${collapsedSections.base ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
-          </div>
+              <div style={subsectionHeaderStyle} onClick={() => toggleSection('weather')}>
+                <h4 style={sectionTitleStyle}>
+                  <i className="fas fa-cloud-sun" style={{ marginRight: '10px', color: '#3498db' }}></i>
+                  Weather Overlays
+                </h4>
+                <i className={`fas fa-angle-${collapsedSections.weather ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
+              </div>
 
-          {!collapsedSections.base && (
-            <div>
-              {baseLayers.map(layer => (
-                <div key={layer.key} 
-                     style={{
-                       ...layerItemStyle,
-                       backgroundColor: selectedBaseLayer === layer.key ? '#2980b9' : '#34495e'
-                     }}
-                     onClick={() => handleBaseLayerSelect(layer.key)}
-                >
-                  <input
-                    type="radio"
-                    name="baseLayer"
-                    checked={selectedBaseLayer === layer.key}
-                    onChange={() => handleBaseLayerSelect(layer.key)}
-                    style={checkboxStyle}
-                  />
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    marginRight: '10px',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    backgroundColor: '#2c3e50',
-                    borderRadius: '4px'
-                  }}>
-                    <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
-                  </div>
-                  <span style={{ fontSize: '14px' }}>{layer.label}</span>
+              {!collapsedSections.weather && (
+                <div>
+                  {weatherLayers.map(layer => (
+                    <div key={layer.key} style={layerItemStyle}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedLayers.has(layer.key)}
+                        onChange={() => handleWeatherLayerToggle(layer.key)}
+                        style={checkboxStyle}
+                      />
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        marginRight: '10px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        backgroundColor: '#2c3e50',
+                        borderRadius: '4px'
+                      }}>
+                        <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px', color: '#3498db' }}></i>
+                      </div>
+                      <span style={{ fontSize: '14px' }}>{layer.label}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div style={sectionHeaderStyle} onClick={() => toggleSection('weather')}>
-            <h3 style={sectionTitleStyle}>
-              <i className="fas fa-cloud-sun" style={{ marginRight: '10px', color: '#3498db' }}></i>
-              Weather Overlays
-            </h3>
-            <i className={`fas fa-angle-${collapsedSections.weather ? 'right' : 'down'}`} style={{ color: '#3498db' }}></i>
-          </div>
-
-          {!collapsedSections.weather && (
-            <div>
-              {[
-                { key: 'clouds', label: 'Clouds', icon: 'cloud' },
-                { key: 'precipitation', label: 'Precipitation', icon: 'cloud-rain' },
-                { key: 'temperature', label: 'Temperature', icon: 'thermometer-half' },
-                { key: 'wind', label: 'Wind', icon: 'wind' }
-              ].map(layer => (
-                <div key={layer.key} style={layerItemStyle}>
-                  <input type="checkbox" style={checkboxStyle} />
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    marginRight: '10px',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    backgroundColor: '#2c3e50',
-                    borderRadius: '4px'
-                  }}>
-                    <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px', color: '#3498db' }}></i>
-                  </div>
-                  <span style={{ fontSize: '14px' }}>{layer.label}</span>
-                </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -4569,37 +4607,19 @@ const MapView = () => {
               </LayersControl.BaseLayer>
             ))}
 
-            <LayersControl.Overlay name="Weather - Clouds">
-              <TileLayer
-                url={`https://tile.openweathermap.org/map/clouds/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
-                attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
-                opacity={0.6}
-              />
-            </LayersControl.Overlay>
-
-            <LayersControl.Overlay name="Weather - Precipitation">
-              <TileLayer
-                url={`https://tile.openweathermap.org/map/precipitation/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
-                attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
-                opacity={0.6}
-              />
-            </LayersControl.Overlay>
-
-            <LayersControl.Overlay name="Weather - Temperature">
-              <TileLayer
-                url={`https://tile.openweathermap.org/map/temp/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
-                attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
-                opacity={0.6}
-              />
-            </LayersControl.Overlay>
-
-            <LayersControl.Overlay name="Weather - Wind">
-              <TileLayer
-                url={`https://tile.openweathermap.org/map/wind/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`}
-                attribution='&copy; <a href="https://openweathermap.org/">OpenWeather</a>'
-                opacity={0.6}
-              />
-            </LayersControl.Overlay>
+            {weatherLayers.map(layer => (
+              <LayersControl.Overlay 
+                key={layer.key} 
+                name={layer.label} 
+                checked={selectedLayers.has(layer.key)}
+              >
+                <TileLayer
+                  url={layer.url}
+                  attribution={layer.attribution}
+                  opacity={0.6}
+                />
+              </LayersControl.Overlay>
+            ))}
 
             {Object.entries(displayData).map(([layer, data]) => (
               selectedLayers.has(layer) && (
