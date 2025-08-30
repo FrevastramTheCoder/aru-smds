@@ -992,10 +992,15 @@ L.Icon.Default.mergeOptions({
 const MapView = () => {
   const [spatialData, setSpatialData] = useState({});
   const [selectedLayers, setSelectedLayers] = useState(new Set(['buildings']));
-  const [legendCollapsed, setLegendCollapsed] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState({
+    landbase: false,
+    base: false,
+    weather: false,
+    legend: false
+  });
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Sample spatial data (in a real app, this would come from an API)
+  // Sample spatial data
   const sampleData = {
     buildings: {
       type: 'FeatureCollection',
@@ -1026,7 +1031,6 @@ const MapView = () => {
   };
 
   useEffect(() => {
-    // Simulate data loading
     setSpatialData(sampleData);
   }, []);
 
@@ -1042,8 +1046,11 @@ const MapView = () => {
     });
   };
 
-  const toggleLegend = () => {
-    setLegendCollapsed(!legendCollapsed);
+  const toggleSection = (section) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
   };
 
   const layerColors = {
@@ -1062,7 +1069,7 @@ const MapView = () => {
     aru_boundary: '#000000'
   };
 
-  const OPENWEATHER_API_KEY = "YOUR_API_KEY"; // Replace with your OpenWeather API key
+  const OPENWEATHER_API_KEY = "YOUR_API_KEY";
 
   // Styles
   const containerStyle = {
@@ -1079,7 +1086,8 @@ const MapView = () => {
     display: 'flex',
     flexDirection: 'column',
     boxShadow: '3px 0 15px rgba(0, 0, 0, 0.2)',
-    zIndex: 1000
+    zIndex: 1000,
+    overflowY: 'auto'
   };
 
   const logoStyle = {
@@ -1105,25 +1113,32 @@ const MapView = () => {
   };
 
   const layersContainerStyle = {
-    flex: 1,
-    overflowY: 'auto',
     padding: '15px'
   };
 
-  const sectionTitleStyle = {
-    margin: '15px 0 10px',
-    paddingBottom: '8px',
-    borderBottom: '2px solid #3498db',
-    fontSize: '1.1rem',
+  const sectionHeaderStyle = {
     display: 'flex',
-    alignItems: 'center'
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px',
+    backgroundColor: '#2c3e50',
+    borderRadius: '4px',
+    margin: '10px 0',
+    cursor: 'pointer'
+  };
+
+  const sectionTitleStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    margin: 0,
+    fontSize: '1rem'
   };
 
   const layerItemStyle = {
     display: 'flex',
     alignItems: 'center',
-    padding: '10px',
-    margin: '5px 0',
+    padding: '8px',
+    margin: '4px 0',
     backgroundColor: '#34495e',
     borderRadius: '4px',
     cursor: 'pointer',
@@ -1135,44 +1150,17 @@ const MapView = () => {
     position: 'relative'
   };
 
-  const legendContainerStyle = {
-    position: 'absolute',
-    bottom: '20px',
-    right: '20px',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-    width: '300px',
-    overflow: 'hidden',
-    transition: 'all 0.3s ease'
-  };
-
-  const legendHeaderStyle = {
-    padding: '12px 15px',
-    backgroundColor: '#2c3e50',
-    color: 'white',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    cursor: 'pointer'
-  };
-
-  const legendContentStyle = {
-    padding: '15px',
-    maxHeight: '300px',
-    overflowY: 'auto'
-  };
-
   const legendItemStyle = {
     display: 'flex',
     alignItems: 'center',
-    marginBottom: '10px'
+    marginBottom: '8px',
+    padding: '4px'
   };
 
   const colorBoxStyle = {
-    width: '20px',
-    height: '20px',
-    marginRight: '10px',
+    width: '16px',
+    height: '16px',
+    marginRight: '8px',
     borderRadius: '3px'
   };
 
@@ -1198,135 +1186,185 @@ const MapView = () => {
         </div>
         
         <div style={layersContainerStyle}>
-          <div style={{ marginBottom: '20px' }}>
+          {/* Landbase Layers Section */}
+          <div style={sectionHeaderStyle} onClick={() => toggleSection('landbase')}>
             <h3 style={sectionTitleStyle}>
               <i className="fas fa-layer-group" style={{ marginRight: '10px', color: '#3498db' }}></i>
               Landbase Layers
             </h3>
-            
-            {[
-              { key: 'buildings', label: 'Buildings', icon: 'building' },
-              { key: 'roads', label: 'Roads', icon: 'road' },
-              { key: 'footpaths', label: 'Footpaths', icon: 'walking' },
-              { key: 'vegetation', label: 'Vegetation', icon: 'tree' },
-              { key: 'parking', label: 'Parking', icon: 'parking' },
-              { key: 'solid_waste', label: 'Solid Waste', icon: 'trash' },
-              { key: 'electricity', label: 'Electricity', icon: 'bolt' },
-              { key: 'water_supply', label: 'Water Supply', icon: 'tint' },
-              { key: 'drainage', label: 'Drainage System', icon: 'water' },
-              { key: 'vimbweta', label: 'Vimbweta', icon: 'map-marked' },
-              { key: 'security', label: 'Security Lights', icon: 'lightbulb' },
-              { key: 'recreational_areas', label: 'Recreational Areas', icon: 'baseball-ball' },
-              { key: 'aru_boundary', label: 'ARU Boundary', icon: 'draw-polygon' }
-            ].map(layer => (
-              <div
-                key={layer.key}
-                style={{
-                  ...layerItemStyle,
-                  backgroundColor: selectedLayers.has(layer.key) ? '#2980b9' : '#34495e'
-                }}
-                onClick={() => handleLayerToggle(layer.key)}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedLayers.has(layer.key)}
-                  onChange={() => {}}
-                  style={{ marginRight: '10px' }}
-                />
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  marginRight: '10px',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  backgroundColor: '#2c3e50',
-                  borderRadius: '4px'
-                }}>
-                  <i className={`fas fa-${layer.icon}`}></i>
-                </div>
-                <span>{layer.label}</span>
-              </div>
-            ))}
+            <i className={`fas fa-chevron-${collapsedSections.landbase ? 'down' : 'up'}`}></i>
           </div>
           
-          <div style={{ marginBottom: '20px' }}>
+          {!collapsedSections.landbase && (
+            <div>
+              {[
+                { key: 'buildings', label: 'Buildings', icon: 'building' },
+                { key: 'roads', label: 'Roads', icon: 'road' },
+                { key: 'footpaths', label: 'Footpaths', icon: 'walking' },
+                { key: 'vegetation', label: 'Vegetation', icon: 'tree' },
+                { key: 'parking', label: 'Parking', icon: 'parking' },
+                { key: 'solid_waste', label: 'Solid Waste', icon: 'trash' },
+                { key: 'electricity', label: 'Electricity', icon: 'bolt' },
+                { key: 'water_supply', label: 'Water Supply', icon: 'tint' },
+                { key: 'drainage', label: 'Drainage System', icon: 'water' },
+                { key: 'vimbweta', label: 'Vimbweta', icon: 'map-marked' },
+                { key: 'security', label: 'Security Lights', icon: 'lightbulb' },
+                { key: 'recreational_areas', label: 'Recreational Areas', icon: 'baseball-ball' },
+                { key: 'aru_boundary', label: 'ARU Boundary', icon: 'draw-polygon' }
+              ].map(layer => (
+                <div
+                  key={layer.key}
+                  style={{
+                    ...layerItemStyle,
+                    backgroundColor: selectedLayers.has(layer.key) ? '#2980b9' : '#34495e'
+                  }}
+                  onClick={() => handleLayerToggle(layer.key)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedLayers.has(layer.key)}
+                    onChange={() => {}}
+                    style={{ marginRight: '10px' }}
+                  />
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    marginRight: '10px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: '#2c3e50',
+                    borderRadius: '4px'
+                  }}>
+                    <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+                  </div>
+                  <span style={{ fontSize: '14px' }}>{layer.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Base Layers Section */}
+          <div style={sectionHeaderStyle} onClick={() => toggleSection('base')}>
             <h3 style={sectionTitleStyle}>
               <i className="fas fa-globe" style={{ marginRight: '10px', color: '#3498db' }}></i>
               Base Layers
             </h3>
-            
-            {[
-              { key: 'openstreetmap', label: 'OpenStreetMap', icon: 'map' },
-              { key: 'carto_light', label: 'Carto Light', icon: 'map-marked' },
-              { key: 'esri_imagery', label: 'Esri World Imagery', icon: 'satellite' },
-              { key: 'google_satellite', label: 'Google Satellite', icon: 'satellite-dish' },
-              { key: 'google_hybrid', label: 'Google Hybrid', icon: 'layer-group' },
-              { key: 'nasa_gibs', label: 'NASA GIBS', icon: 'globe-americas' }
-            ].map(layer => (
-              <div
-                key={layer.key}
-                style={layerItemStyle}
-              >
-                <input
-                  type="radio"
-                  name="baseLayer"
-                  defaultChecked={layer.key === 'openstreetmap'}
-                  style={{ marginRight: '10px' }}
-                />
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  marginRight: '10px',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  backgroundColor: '#2c3e50',
-                  borderRadius: '4px'
-                }}>
-                  <i className={`fas fa-${layer.icon}`}></i>
-                </div>
-                <span>{layer.label}</span>
-              </div>
-            ))}
+            <i className={`fas fa-chevron-${collapsedSections.base ? 'down' : 'up'}`}></i>
           </div>
           
-          <div style={{ marginBottom: '20px' }}>
+          {!collapsedSections.base && (
+            <div>
+              {[
+                { key: 'openstreetmap', label: 'OpenStreetMap', icon: 'map' },
+                { key: 'carto_light', label: 'Carto Light', icon: 'map-marked' },
+                { key: 'esri_imagery', label: 'Esri World Imagery', icon: 'satellite' },
+                { key: 'google_satellite', label: 'Google Satellite', icon: 'satellite-dish' },
+                { key: 'google_hybrid', label: 'Google Hybrid', icon: 'layer-group' },
+                { key: 'nasa_gibs', label: 'NASA GIBS', icon: 'globe-americas' }
+              ].map(layer => (
+                <div
+                  key={layer.key}
+                  style={layerItemStyle}
+                >
+                  <input
+                    type="radio"
+                    name="baseLayer"
+                    defaultChecked={layer.key === 'openstreetmap'}
+                    style={{ marginRight: '10px' }}
+                  />
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    marginRight: '10px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: '#2c3e50',
+                    borderRadius: '4px'
+                  }}>
+                    <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px' }}></i>
+                  </div>
+                  <span style={{ fontSize: '14px' }}>{layer.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Weather Overlays Section */}
+          <div style={sectionHeaderStyle} onClick={() => toggleSection('weather')}>
             <h3 style={sectionTitleStyle}>
               <i className="fas fa-cloud-sun" style={{ marginRight: '10px', color: '#3498db' }}></i>
               Weather Overlays
             </h3>
-            
-            {[
-              { key: 'clouds', label: 'Clouds', icon: 'cloud' },
-              { key: 'precipitation', label: 'Precipitation', icon: 'cloud-rain' },
-              { key: 'temperature', label: 'Temperature', icon: 'thermometer-half' },
-              { key: 'wind', label: 'Wind', icon: 'wind' }
-            ].map(layer => (
-              <div
-                key={layer.key}
-                style={layerItemStyle}
-              >
-                <input
-                  type="checkbox"
-                  style={{ marginRight: '10px' }}
-                />
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  marginRight: '10px',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  backgroundColor: '#2c3e50',
-                  borderRadius: '4px'
-                }}>
-                  <i className={`fas fa-${layer.icon}`} style={{ color: '#3498db' }}></i>
-                </div>
-                <span>{layer.label}</span>
-              </div>
-            ))}
+            <i className={`fas fa-chevron-${collapsedSections.weather ? 'down' : 'up'}`}></i>
           </div>
+          
+          {!collapsedSections.weather && (
+            <div>
+              {[
+                { key: 'clouds', label: 'Clouds', icon: 'cloud' },
+                { key: 'precipitation', label: 'Precipitation', icon: 'cloud-rain' },
+                { key: 'temperature', label: 'Temperature', icon: 'thermometer-half' },
+                { key: 'wind', label: 'Wind', icon: 'wind' }
+              ].map(layer => (
+                <div
+                  key={layer.key}
+                  style={layerItemStyle}
+                >
+                  <input
+                    type="checkbox"
+                    style={{ marginRight: '10px' }}
+                  />
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    marginRight: '10px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: '#2c3e50',
+                    borderRadius: '4px'
+                  }}>
+                    <i className={`fas fa-${layer.icon}`} style={{ fontSize: '12px', color: '#3498db' }}></i>
+                  </div>
+                  <span style={{ fontSize: '14px' }}>{layer.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Legend Section */}
+          <div style={sectionHeaderStyle} onClick={() => toggleSection('legend')}>
+            <h3 style={sectionTitleStyle}>
+              <i className="fas fa-map-legend" style={{ marginRight: '10px', color: '#3498db' }}></i>
+              Legend
+            </h3>
+            <i className={`fas fa-chevron-${collapsedSections.legend ? 'down' : 'up'}`}></i>
+          </div>
+          
+          {!collapsedSections.legend && (
+            <div style={{ backgroundColor: '#2c3e50', padding: '10px', borderRadius: '4px' }}>
+              {Object.entries(layerColors).map(([layer, color]) => (
+                <div key={layer} style={legendItemStyle}>
+                  <div style={{ ...colorBoxStyle, backgroundColor: color }}></div>
+                  <span style={{ fontSize: '13px' }}>{layer.replace(/_/g, ' ')}</span>
+                </div>
+              ))}
+              <div style={legendItemStyle}>
+                <div style={{ ...colorBoxStyle, backgroundColor: '#3498db' }}></div>
+                <span style={{ fontSize: '13px' }}>Water Bodies</span>
+              </div>
+              <div style={legendItemStyle}>
+                <div style={{ ...colorBoxStyle, backgroundColor: '#27ae60' }}></div>
+                <span style={{ fontSize: '13px' }}>Vegetation</span>
+              </div>
+              <div style={legendItemStyle}>
+                <div style={{ ...colorBoxStyle, backgroundColor: '#c0392b' }}></div>
+                <span style={{ fontSize: '13px' }}>Residential Areas</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
@@ -1372,7 +1410,7 @@ const MapView = () => {
               />
             </LayersControl.BaseLayer>
 
-            <LayersControl.BaseLayer name="NASA GIBS (MODIS True Color)">
+            <LayersControl.BaseLayer name="NASA GIBS">
               <TileLayer
                 url="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2023-01-01/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg"
                 attribution="Imagery © NASA EOSDIS GIBS"
@@ -1438,45 +1476,6 @@ const MapView = () => {
             ))}
           </LayersControl>
         </MapContainer>
-        
-        <div style={{
-          ...legendContainerStyle,
-          height: legendCollapsed ? 'auto' : 'auto'
-        }}>
-          <div style={legendHeaderStyle} onClick={toggleLegend}>
-            <h3 style={{ margin: 0 }}>
-              <i className="fas fa-map-legend" style={{ marginRight: '10px' }}></i>
-              Map Legend
-            </h3>
-            <i className={`fas fa-chevron-${legendCollapsed ? 'up' : 'down'}`}></i>
-          </div>
-          {!legendCollapsed && (
-            <div style={legendContentStyle}>
-              {Object.entries(layerColors).map(([layer, color]) => (
-                <div key={layer} style={legendItemStyle}>
-                  <div style={{ ...colorBoxStyle, backgroundColor: color }}></div>
-                  <span>{layer.replace(/_/g, ' ').toUpperCase()}</span>
-                </div>
-              ))}
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#3498db' }}></div>
-                <span>Water Bodies</span>
-              </div>
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#27ae60' }}></div>
-                <span>Vegetation</span>
-              </div>
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#c0392b' }}></div>
-                <span>Residential Areas</span>
-              </div>
-              <div style={legendItemStyle}>
-                <div style={{ ...colorBoxStyle, backgroundColor: '#7f8c8d' }}></div>
-                <span>Roads</span>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
