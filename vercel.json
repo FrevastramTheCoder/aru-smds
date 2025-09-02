@@ -2,10 +2,6 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/auth/google/callback",
-      "destination": "/index.html"
-    },
-    {
       "source": "/api/auth/:path*",
       "destination": "https://backend-sp9b.onrender.com/api/v1/auth/:path*"
     },
