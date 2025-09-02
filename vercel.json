@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+   
     {
       "source": "/api/auth/:path*",
       "destination": "https://backend-sp9b.onrender.com/api/v1/auth/:path*"
@@ -9,6 +10,7 @@
       "source": "/api/spatial/:path*",
       "destination": "https://backend-sp9b.onrender.com/api/spatial/:path*"
     },
+    
     {
       "source": "/(.*)",
       "destination": "/index.html"
