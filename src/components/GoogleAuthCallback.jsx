@@ -1,9 +1,8 @@
-// src/components/GoogleAuthCallback.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
-import { jwtDecode } from 'jwt-decode'; // ✅ fixed import
+import jwt_decode from 'jwt-decode'; // ✅ fixed import for Vercel build
 
 export default function GoogleAuthCallback() {
   const navigate = useNavigate();
@@ -31,7 +30,7 @@ export default function GoogleAuthCallback() {
 
     if (token) {
       try {
-        const user = jwtDecode(token); // ✅ fixed usage
+        const user = jwt_decode(token); // ✅ corrected usage
         localStorage.setItem('user', JSON.stringify(user));
       } catch (err) {
         console.warn('Invalid JWT token:', err);
