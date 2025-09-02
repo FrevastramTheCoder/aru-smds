@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
-import { decode as jwt_decode } from 'jwt-decode'; // ✅ ESM-compatible import
+import jwt_decode from 'jwt-decode/build/jwt-decode'; // ✅ ESM-safe import
 
 export default function GoogleAuthCallback() {
   const navigate = useNavigate();
@@ -30,7 +30,7 @@ export default function GoogleAuthCallback() {
 
     if (token) {
       try {
-        const user = jwt_decode(token); // ✅ use named decode
+        const user = jwt_decode(token);
         localStorage.setItem('user', JSON.stringify(user));
       } catch (err) {
         console.warn('Invalid JWT token:', err);
