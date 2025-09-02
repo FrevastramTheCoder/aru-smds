@@ -1,8 +1,8 @@
+// src/components/GoogleAuthCallback.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
-import jwt_decode from 'jwt-decode/build/jwt-decode'; // ✅ ESM-safe import
 
 export default function GoogleAuthCallback() {
   const navigate = useNavigate();
@@ -22,38 +22,40 @@ export default function GoogleAuthCallback() {
       if (isMounted) setError(error);
       setMessage(`Error: ${error}. Redirecting to login...`);
       setLoading(false);
-      setTimeout(() => {
-        if (isMounted) navigate('/login');
-      }, 3000);
+      setTimeout(() => { if (isMounted) navigate('/login'); }, 3000);
       return;
     }
 
     if (token) {
-      try {
-        const user = jwt_decode(token);
-        localStorage.setItem('user', JSON.stringify(user));
-      } catch (err) {
-        console.warn('Invalid JWT token:', err);
-      }
+      (async () => {
+        try {
+          // ✅ Dynamic import for Vite + ESM compatibility
+          const jwtDecode = (await import('jwt-decode')).default;
+          const user = jwtDecode(token);
+          localStorage.setItem('user', JSON.stringify(user));
+        } catch (err) {
+          console.warn('Invalid JWT token:', err);
+        }
 
-      googleLogin(token)
-        .then(() => {
-          if (isMounted) {
-            localStorage.setItem('token', token);
-            setMessage('Login successful! Redirecting...');
-            setLoading(false);
-            setTimeout(() => navigate('/dashboard'), 500);
-          }
-        })
-        .catch((err) => {
-          if (isMounted) {
-            const msg = err.message || 'Google login failed';
-            setError(msg);
-            setMessage(`Error: ${msg}. Redirecting to login...`);
-            setLoading(false);
-            setTimeout(() => navigate('/login'), 3000);
-          }
-        });
+        googleLogin(token)
+          .then(() => {
+            if (isMounted) {
+              localStorage.setItem('token', token);
+              setMessage('Login successful! Redirecting...');
+              setLoading(false);
+              setTimeout(() => navigate('/dashboard'), 500);
+            }
+          })
+          .catch((err) => {
+            if (isMounted) {
+              const msg = err.message || 'Google login failed';
+              setError(msg);
+              setMessage(`Error: ${msg}. Redirecting to login...`);
+              setLoading(false);
+              setTimeout(() => navigate('/login'), 3000);
+            }
+          });
+      })();
     } else {
       if (isMounted) {
         const msg = 'No token received from Google.';
@@ -64,9 +66,7 @@ export default function GoogleAuthCallback() {
       }
     }
 
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [location.search, navigate]);
 
   return (
