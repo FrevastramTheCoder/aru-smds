@@ -322,87 +322,45 @@
 //     </div>
 //   );
 // }
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export default function Login() {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
+  const [message, setMessage] = useState('');
   const { login, googleLogin, error: authError, setError } = useAuth();
   const navigate = useNavigate();
 
-  const baseApiUrl = import.meta.env.VITE_API_URL || '/api/v1/auth';
-
-  // ✅ Fake token to bypass login
-  const FAKE_TOKEN =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjEwOTEyMzgwNzMxMjgxMyIsImVtYWlsIjoiZmFrZWVtYWlsQGdtYWlsLmNvbSIsIm5hbWUiOiJGYWtlVXNlciIsImlhdCI6MTc1NjkwOTMwMywiZXhwIjoyMDAwMDAwMDAwMH0.qFlKTkRAmdccm0l44OoMkgOtYrrE9i4myVOWCzOtfJA";
-
-  // Handle Google OAuth redirect token
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const errorParam = urlParams.get('error');
-    const errorDetails = urlParams.get('details');
-    const verifiedEmail = urlParams.get('verifiedEmail');
-
-    const handleGoogleToken = async () => {
-      if (!token) return;
-      try {
-        setIsLoading(true);
-        await googleLogin(token); // AuthContext handles storing token/user
-        setMessage('Google login successful!');
-        // Clean URL to prevent token exposure
-        window.history.replaceState({}, document.title, window.location.pathname);
-        navigate('/dashboard');
-      } catch (err) {
-        console.error('Google login error:', err);
-        setError(err.message || 'Google login failed');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (errorParam === 'google_auth_failed') {
-      setError(
-        `Google login failed: ${decodeURIComponent(
-          errorDetails || 'Please try again or use email/password.'
-        )}`
-      );
-    } else if (token) {
-      handleGoogleToken();
-    }
-
-    if (verifiedEmail) {
-      setFormData((prev) => ({ ...prev, email: verifiedEmail }));
-      setMessage('Email verified! You can now log in.');
-    }
-  }, [navigate, setError, googleLogin]);
-
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError(null);
-    setMessage('');
-  };
-
-  // ✅ Modified login: bypass with fake token
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleLoginClick = async () => {
     setIsLoading(true);
     setError(null);
     setMessage('');
 
     try {
-      // Bypass: directly log in using fake token
-      await googleLogin(FAKE_TOKEN);
-      setMessage('Login bypassed successfully!');
+      // ✅ Call bypass login
+      await login(); 
+      setMessage('Login successful!');
       setTimeout(() => navigate('/dashboard'), 500);
     } catch (err) {
-      console.error('Login bypass error:', err);
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Login failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLoginClick = async () => {
+    setIsLoading(true);
+    setError(null);
+    setMessage('');
+
+    try {
+      await googleLogin();
+      setMessage('Google login successful!');
+      setTimeout(() => navigate('/dashboard'), 500);
+    } catch (err) {
+      setError(err.message || 'Google login failed.');
     } finally {
       setIsLoading(false);
     }
@@ -415,37 +373,9 @@ export default function Login() {
         {authError && <p className="error-message">{authError}</p>}
         {message && <p className="success-message">{message}</p>}
 
-        <form onSubmit={handleLogin} className="login-form">
-          <div className="input-wrapper">
-            <Mail className="input-icon" />
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className="input-with-icon"
-              placeholder="Email"
-              required
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="input-wrapper">
-            <Lock className="input-icon" />
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              className="input-with-icon"
-              placeholder="Password"
-              required
-              autoComplete="current-password"
-            />
-          </div>
-
+        <div className="login-form">
           <button
-            type="submit"
+            onClick={handleLoginClick}
             disabled={isLoading}
             className={`btn-primary ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
@@ -455,27 +385,21 @@ export default function Login() {
                 Logging in...
               </>
             ) : (
-              'Login'
+              'Login (One Click)'
             )}
           </button>
-        </form>
-
-        <div className="forgot-password-link">
-          <a href="/forgot-password" className="forgot-password-btn">
-            Forgot password?
-          </a>
         </div>
 
         <div className="divider-with-text">or</div>
 
         <div className="social-buttons">
           <button
-            onClick={() => { window.location.href = `${baseApiUrl}/google`; }}
+            onClick={handleGoogleLoginClick}
             disabled={isLoading}
             className={`social-button google ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label="Sign in with Google"
           >
-            <span>Sign in with Google</span>
+            <span>Sign in with Google (Bypass)</span>
           </button>
         </div>
 
