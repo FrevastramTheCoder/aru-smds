@@ -10,6 +10,10 @@
       "destination": "https://backend-sp9b.onrender.com/api/spatial/:path*"
     },
     {
+      "source": "/auth/google/callback",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
