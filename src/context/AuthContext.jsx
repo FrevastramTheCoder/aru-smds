@@ -202,7 +202,6 @@
 //   return context;
 // }
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios'; // Added for API calls
 
 const AuthContext = createContext();
 
@@ -217,7 +216,7 @@ function parseJwt(token) {
 }
 
 export function AuthProvider({ children }) {
-  const baseApiUrl = import.meta.env.VITE_API_URL || 'https://backend-sp9b.onrender.com/api/v1/auth';
+  const baseApiUrl = import.meta.env.VITE_API_URL || '/api/v1/auth';
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -264,14 +263,17 @@ export function AuthProvider({ children }) {
 
     const refreshTimeout = setTimeout(async () => {
       try {
-        const res = await axios.post(`${baseApiUrl}/refresh`, {}, {
-          headers: { 'Authorization': `Bearer ${token}` },
-          withCredentials: true,
+        const res = await fetch(`${baseApiUrl}/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+          credentials: 'include',
         });
-        if (res.status === 200 && res.data.token && res.data.user) {
-          localStorage.setItem('token', res.data.token);
-          localStorage.setItem('user', JSON.stringify(res.data.user));
-          setUser(res.data.user);
+        const data = await res.json();
+        if (res.ok && data.token && data.user) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          setUser(data.user);
           setIsAuthenticated(true);
           setError(null);
         } else {
@@ -289,26 +291,26 @@ export function AuthProvider({ children }) {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const response = await axios.post(`${baseApiUrl}/register`, {
-          username,
-          email,
-          password,
-        }, { withCredentials: true });
-        if (response.status === 200 && response.data.token && response.data.user) {
-          localStorage.setItem('token', response.data.token);
-          localStorage.setItem('user', JSON.stringify(response.data.user));
-          setIsAuthenticated(true);
-          setUser(response.data.user);
-          setError(null);
-          return response.data;
+        const response = await fetch(`${baseApiUrl}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password }),
+          credentials: 'include',
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          const error = new Error(data.error || 'Registration failed');
+          error.response = data;
+          throw error;
         }
+        return data;
       } catch (error) {
         lastError = error;
         if (error.response?.status === 400) throw error;
         if (attempt < retries) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
       }
     }
-    setError(lastError.response?.data?.error || lastError.message);
+    setError(lastError.response?.error || lastError.message);
     throw lastError;
   };
 
@@ -316,36 +318,40 @@ export function AuthProvider({ children }) {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const response = await axios.post(`${baseApiUrl}/login`, formData, {
-          withCredentials: true,
+        const response = await fetch(`${baseApiUrl}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+          credentials: 'include',
         });
-        if (response.status === 200) {
-          localStorage.setItem('token', response.data.token);
-          localStorage.setItem('user', JSON.stringify(response.data.user));
-          setIsAuthenticated(true);
-          setUser(response.data.user);
-          setError(null);
-          return response.data;
+        const data = await response.json();
+        if (!response.ok) {
+          const error = new Error(data.error || 'Login failed');
+          error.response = data;
+          throw error;
         }
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setIsAuthenticated(true);
+        setUser(data.user);
+        setError(null);
+        return data;
       } catch (error) {
         lastError = error;
         if (attempt < retries) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
       }
     }
-    setError(lastError.response?.data?.details || lastError.message);
+    setError(lastError.response?.details || lastError.message);
     throw lastError;
   };
 
   const googleLogin = async (token) => {
     if (!token) throw new Error('No token provided');
     try {
-      const response = await axios.post(`${baseApiUrl}/validate`, { token }, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
       const payload = parseJwt(token);
       if (!payload) throw new Error('Invalid token format');
       const userFromToken = {
-        google_id: payload.sub || payload.id,
+        id: payload.id,
         email: payload.email,
         name: payload.name,
       };
@@ -354,9 +360,9 @@ export function AuthProvider({ children }) {
       setUser(userFromToken);
       setIsAuthenticated(true);
       setError(null);
-      return { token, user: userFromToken, ...response.data };
+      return { token, user: userFromToken };
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid token format');
+      setError('Invalid token format');
       logout();
       throw err;
     }
