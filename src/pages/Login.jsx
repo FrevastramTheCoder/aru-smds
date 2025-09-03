@@ -153,6 +153,8 @@
 //     </div>
 //   );
 // }
+
+// src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -180,7 +182,7 @@ export default function Login() {
       if (!token) return;
       try {
         setIsLoading(true);
-        await googleLogin(token); // Call AuthContext function
+        await googleLogin(token); // Use AuthContext function
         setMessage('Google login successful!');
         // Clean URL to prevent 404 on refresh
         const cleanUrl = window.location.origin + window.location.pathname;

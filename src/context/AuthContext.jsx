@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext();
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Logout function
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -27,9 +29,11 @@ export function AuthProvider({ children }) {
     setError(null);
   }, []);
 
+  // Load auth state from localStorage on mount
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
+
     if (token && userStr) {
       const payload = parseJwt(token);
       if (payload && payload.exp * 1000 > Date.now()) {
@@ -42,7 +46,7 @@ export function AuthProvider({ children }) {
     setIsLoading(false);
   }, [logout]);
 
-  // Auto refresh token
+  // Auto refresh token 1 minute before expiry
   useEffect(() => {
     if (!user) return;
     const token = localStorage.getItem('token');
@@ -59,7 +63,10 @@ export function AuthProvider({ children }) {
 
     const refreshTimeout = setTimeout(async () => {
       try {
-        const res = await fetch(`${baseApiUrl}/refresh`, { method: 'POST', credentials: 'include' });
+        const res = await fetch(`${baseApiUrl}/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
         const data = await res.json();
         if (res.ok && data.token && data.user) {
           localStorage.setItem('token', data.token);
@@ -78,6 +85,7 @@ export function AuthProvider({ children }) {
     return () => clearTimeout(refreshTimeout);
   }, [user, baseApiUrl, logout]);
 
+  // Register user
   const register = async (username, email, password, retries = 3) => {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -90,6 +98,7 @@ export function AuthProvider({ children }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Registration failed');
+
         if (data.token && data.user) {
           localStorage.setItem('token', data.token);
           localStorage.setItem('user', JSON.stringify(data.user));
@@ -107,6 +116,7 @@ export function AuthProvider({ children }) {
     throw lastError;
   };
 
+  // Login user
   const login = async (formData, retries = 3) => {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -119,6 +129,7 @@ export function AuthProvider({ children }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Login failed');
+
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         setIsAuthenticated(true);
@@ -134,16 +145,19 @@ export function AuthProvider({ children }) {
     throw lastError;
   };
 
+  // Google login
   const googleLogin = async (token) => {
     if (!token) throw new Error('No token provided');
     try {
       const payload = parseJwt(token);
       if (!payload) throw new Error('Invalid token');
+
       const userFromToken = {
         google_id: payload.sub || payload.id,
         email: payload.email,
         name: payload.name,
       };
+
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userFromToken));
       setUser(userFromToken);
@@ -178,6 +192,7 @@ export function AuthProvider({ children }) {
   );
 }
 
+// Custom hook to use auth
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
