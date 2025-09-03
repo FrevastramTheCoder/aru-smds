@@ -14,10 +14,6 @@
       "destination": "https://backend-sp9b.onrender.com/api/v1/auth/google/callback"
     },
     {
-      "source": "/auth/google/callback/:path*",
-      "destination": "https://backend-sp9b.onrender.com/api/v1/auth/google/callback/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
