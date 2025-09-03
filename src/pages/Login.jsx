@@ -1,11 +1,10 @@
-
-
+// src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 
-function Login() {
+export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -14,19 +13,33 @@ function Login() {
 
   const baseApiUrl = import.meta.env.VITE_API_URL || '/api/v1/auth';
 
+  // Handle Google OAuth redirect token and verifiedEmail
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
     const errorParam = urlParams.get('error');
     const errorDetails = urlParams.get('details');
-    const token = urlParams.get('token');
     const verifiedEmail = urlParams.get('verifiedEmail');
 
     if (errorParam === 'google_auth_failed') {
-      setError(`Google login failed: ${decodeURIComponent(errorDetails || 'Please try again or use email/password.')}`);
+      setError(
+        `Google login failed: ${decodeURIComponent(
+          errorDetails || 'Please try again or use email/password.'
+        )}`
+      );
     } else if (token) {
+      // Save token to localStorage
       localStorage.setItem('token', token);
+
+      // Optional: decode token to get user info if needed
+      // const payload = JSON.parse(atob(token.split('.')[1]));
+
       setMessage('Google login successful!');
-      setTimeout(() => navigate('/dashboard'), 1000);
+      // Clean up URL so token doesn't remain in query params
+      window.history.replaceState({}, document.title, '/dashboard');
+
+      // Navigate to dashboard
+      navigate('/dashboard');
     }
 
     if (verifiedEmail) {
@@ -110,15 +123,19 @@ function Login() {
             )}
           </button>
         </form>
+
         <div className="forgot-password-link">
           <a href="/forgot-password" className="forgot-password-btn">
             Forgot password?
           </a>
         </div>
+
         <div className="divider-with-text">or</div>
+
         <div className="social-buttons">
           <button
             onClick={() => {
+              // Redirect to backend Google OAuth endpoint
               window.location.href = `${baseApiUrl}/google`;
             }}
             disabled={isLoading}
@@ -131,6 +148,7 @@ function Login() {
             <span>Sign in with Google</span>
           </button>
         </div>
+
         <div className="register-link">
           Don't have an account? <a href="/register">Register</a>
         </div>
@@ -138,5 +156,3 @@ function Login() {
     </div>
   );
 }
-
-export default Login;
