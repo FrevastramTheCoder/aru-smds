@@ -1,8 +1,8 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext();
 
+// ✅ Parse JWT token
 function parseJwt(token) {
   try {
     const base64Payload = token.split('.')[1];
@@ -13,14 +13,15 @@ function parseJwt(token) {
 }
 
 export function AuthProvider({ children }) {
-  const baseApiUrl = import.meta.env.VITE_API_URL || '/api/v1/auth';
+  // ✅ Use backend-sp9b Render API for auth
+  const AUTH_API_BASE = (import.meta.env.VITE_API_AUTH_URL || "https://backend-sp9b.onrender.com/api/v1/auth").replace(/\/$/, "");
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Logout function
+  // ✅ Logout
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -29,7 +30,7 @@ export function AuthProvider({ children }) {
     setError(null);
   }, []);
 
-  // Load auth state from localStorage on mount
+  // ✅ Load auth state from localStorage on mount
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
@@ -46,7 +47,7 @@ export function AuthProvider({ children }) {
     setIsLoading(false);
   }, [logout]);
 
-  // Auto refresh token 1 minute before expiry
+  // ✅ Auto-refresh token 1 min before expiry
   useEffect(() => {
     if (!user) return;
     const token = localStorage.getItem('token');
@@ -63,7 +64,7 @@ export function AuthProvider({ children }) {
 
     const refreshTimeout = setTimeout(async () => {
       try {
-        const res = await fetch(`${baseApiUrl}/refresh`, {
+        const res = await fetch(`${AUTH_API_BASE}/refresh`, {
           method: 'POST',
           credentials: 'include',
         });
@@ -83,14 +84,14 @@ export function AuthProvider({ children }) {
     }, expiresInMs);
 
     return () => clearTimeout(refreshTimeout);
-  }, [user, baseApiUrl, logout]);
+  }, [user, AUTH_API_BASE, logout]);
 
-  // Register user
+  // ✅ Register
   const register = async (username, email, password, retries = 3) => {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(`${baseApiUrl}/register`, {
+        const res = await fetch(`${AUTH_API_BASE}/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, email, password }),
@@ -116,12 +117,12 @@ export function AuthProvider({ children }) {
     throw lastError;
   };
 
-  // Login user
+  // ✅ Login
   const login = async (formData, retries = 3) => {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(`${baseApiUrl}/login`, {
+        const res = await fetch(`${AUTH_API_BASE}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
@@ -145,7 +146,7 @@ export function AuthProvider({ children }) {
     throw lastError;
   };
 
-  // Google login
+  // ✅ Google login
   const googleLogin = async (token) => {
     if (!token) throw new Error('No token provided');
     try {
@@ -192,7 +193,7 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Custom hook to use auth
+// ✅ Custom hook
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
