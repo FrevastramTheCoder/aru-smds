@@ -29,7 +29,7 @@ export default function GoogleAuthCallback() {
     if (token) {
       (async () => {
         try {
-          // ✅ Dynamic import for Vite + ESM compatibility
+          // Dynamic import for Vite + ESM compatibility
           const jwtDecode = (await import('jwt-decode')).default;
           const user = jwtDecode(token);
           localStorage.setItem('user', JSON.stringify(user));
