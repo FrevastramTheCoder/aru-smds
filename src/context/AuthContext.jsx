@@ -1,234 +1,180 @@
-// import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-// const AuthContext = createContext();
-
-// // ✅ Parse JWT token
-// function parseJwt(token) {
-//   try {
-//     const base64Payload = token.split('.')[1];
-//     return JSON.parse(atob(base64Payload));
-//   } catch {
-//     return null;
-//   }
-// }
-
-// export function AuthProvider({ children }) {
-//   // ✅ Use backend-sp9b Render API for auth
-//   const AUTH_API_BASE = (import.meta.env.VITE_API_AUTH_URL || "https://backend-sp9b.onrender.com/api/v1/auth").replace(/\/$/, "");
-
-//   const [isAuthenticated, setIsAuthenticated] = useState(false);
-//   const [user, setUser] = useState(null);
-//   const [isLoading, setIsLoading] = useState(true);
-//   const [error, setError] = useState(null);
-
-//   // ✅ Logout
-//   const logout = useCallback(() => {
-//     localStorage.removeItem('token');
-//     localStorage.removeItem('user');
-//     setIsAuthenticated(false);
-//     setUser(null);
-//     setError(null);
-//   }, []);
-
-//   // ✅ Load auth state from localStorage on mount
-//   useEffect(() => {
-//     const token = localStorage.getItem('token');
-//     const userStr = localStorage.getItem('user');
-
-//     if (token && userStr) {
-//       const payload = parseJwt(token);
-//       if (payload && payload.exp * 1000 > Date.now()) {
-//         setIsAuthenticated(true);
-//         setUser(JSON.parse(userStr));
-//       } else {
-//         logout();
-//       }
-//     }
-//     setIsLoading(false);
-//   }, [logout]);
-
-//   // ✅ Auto-refresh token 1 min before expiry
-//   useEffect(() => {
-//     if (!user) return;
-//     const token = localStorage.getItem('token');
-//     if (!token) return;
-
-//     const payload = parseJwt(token);
-//     if (!payload?.exp) return;
-
-//     const expiresInMs = payload.exp * 1000 - Date.now() - 60000;
-//     if (expiresInMs <= 0) {
-//       logout();
-//       return;
-//     }
-
-//     const refreshTimeout = setTimeout(async () => {
-//       try {
-//         const res = await fetch(`${AUTH_API_BASE}/refresh`, {
-//           method: 'POST',
-//           credentials: 'include',
-//         });
-//         const data = await res.json();
-//         if (res.ok && data.token && data.user) {
-//           localStorage.setItem('token', data.token);
-//           localStorage.setItem('user', JSON.stringify(data.user));
-//           setUser(data.user);
-//           setIsAuthenticated(true);
-//           setError(null);
-//         } else {
-//           logout();
-//         }
-//       } catch {
-//         logout();
-//       }
-//     }, expiresInMs);
-
-//     return () => clearTimeout(refreshTimeout);
-//   }, [user, AUTH_API_BASE, logout]);
-
-//   // ✅ Register
-//   const register = async (username, email, password, retries = 3) => {
-//     let lastError;
-//     for (let attempt = 1; attempt <= retries; attempt++) {
-//       try {
-//         const res = await fetch(`${AUTH_API_BASE}/register`, {
-//           method: 'POST',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify({ username, email, password }),
-//           credentials: 'include',
-//         });
-//         const data = await res.json();
-//         if (!res.ok) throw new Error(data.error || 'Registration failed');
-
-//         if (data.token && data.user) {
-//           localStorage.setItem('token', data.token);
-//           localStorage.setItem('user', JSON.stringify(data.user));
-//           setIsAuthenticated(true);
-//           setUser(data.user);
-//           setError(null);
-//         }
-//         return data;
-//       } catch (err) {
-//         lastError = err;
-//         if (attempt < retries) await new Promise((r) => setTimeout(r, 2000 * attempt));
-//       }
-//     }
-//     setError(lastError.message);
-//     throw lastError;
-//   };
-
-//   // ✅ Login
-//   const login = async (formData, retries = 3) => {
-//     let lastError;
-//     for (let attempt = 1; attempt <= retries; attempt++) {
-//       try {
-//         const res = await fetch(`${AUTH_API_BASE}/login`, {
-//           method: 'POST',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify(formData),
-//           credentials: 'include',
-//         });
-//         const data = await res.json();
-//         if (!res.ok) throw new Error(data.error || 'Login failed');
-
-//         localStorage.setItem('token', data.token);
-//         localStorage.setItem('user', JSON.stringify(data.user));
-//         setIsAuthenticated(true);
-//         setUser(data.user);
-//         setError(null);
-//         return data;
-//       } catch (err) {
-//         lastError = err;
-//         if (attempt < retries) await new Promise((r) => setTimeout(r, 2000 * attempt));
-//       }
-//     }
-//     setError(lastError.message);
-//     throw lastError;
-//   };
-
-//   // ✅ Google login
-//   const googleLogin = async (token) => {
-//     if (!token) throw new Error('No token provided');
-//     try {
-//       const payload = parseJwt(token);
-//       if (!payload) throw new Error('Invalid token');
-
-//       const userFromToken = {
-//         google_id: payload.sub || payload.id,
-//         email: payload.email,
-//         name: payload.name,
-//       };
-
-//       localStorage.setItem('token', token);
-//       localStorage.setItem('user', JSON.stringify(userFromToken));
-//       setUser(userFromToken);
-//       setIsAuthenticated(true);
-//       setError(null);
-//       return { token, user: userFromToken };
-//     } catch (err) {
-//       setError('Invalid token format');
-//       logout();
-//       throw err;
-//     }
-//   };
-
-//   return (
-//     <AuthContext.Provider
-//       value={{
-//         register,
-//         login,
-//         googleLogin,
-//         logout,
-//         isAuthenticated,
-//         user,
-//         isLoading,
-//         error,
-//         setError,
-//         setIsAuthenticated,
-//         setUser,
-//       }}
-//     >
-//       {children}
-//     </AuthContext.Provider>
-//   );
-// }
-
-// // ✅ Custom hook
-// export function useAuth() {
-//   const context = useContext(AuthContext);
-//   if (!context) throw new Error('useAuth must be used within AuthProvider');
-//   return context;
-// }
+//corrected
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext();
 
-// ✅ AuthProvider bypasses backend
+function parseJwt(token) {
+  try {
+    const base64Payload = token.split('.')[1];
+    const payload = JSON.parse(atob(base64Payload));
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // always logged in
-  const [user, setUser] = useState({ name: 'Bypass User', email: 'bypass@example.com' });
-  const [isLoading, setIsLoading] = useState(false);
+  const baseApiUrl = import.meta.env.VITE_API_URL || '/api/v1/auth';
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Logout helper
   const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setIsAuthenticated(false);
     setUser(null);
     setError(null);
   }, []);
 
-  const login = async () => {
-    setIsAuthenticated(true);
-    setUser({ name: 'Bypass User', email: 'bypass@example.com' });
-    return { user };
+  // Load auth state from localStorage on mount
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    if (token && userStr) {
+      const payload = parseJwt(token);
+      if (payload && payload.exp * 1000 > Date.now()) {
+        setIsAuthenticated(true);
+        setUser(JSON.parse(userStr));
+      } else {
+        // Token expired
+        logout();
+      }
+    }
+    setIsLoading(false);
+  }, [logout]);
+
+  // Auto refresh token before expiry
+  useEffect(() => {
+    if (!user) return;
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const payload = parseJwt(token);
+    if (!payload?.exp) return;
+
+    const expiresInMs = payload.exp * 1000 - Date.now() - 60000; // 1 min before expire
+    if (expiresInMs <= 0) {
+      logout();
+      return;
+    }
+
+    const refreshTimeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`${baseApiUrl}/refresh`, {
+          method: 'POST',
+          credentials: 'include', // send cookies for refresh token
+        });
+        const data = await res.json();
+        if (res.ok && data.token && data.user) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          setUser(data.user);
+          setIsAuthenticated(true);
+          setError(null);
+        } else {
+          logout();
+        }
+      } catch {
+        logout();
+      }
+    }, expiresInMs);
+
+    return () => clearTimeout(refreshTimeout);
+  }, [user, baseApiUrl, logout]);
+
+  const register = async (username, email, password, retries = 3) => {
+    let lastError;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`${baseApiUrl}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password }),
+          credentials: 'include',
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          const error = new Error(data.error || 'Registration failed');
+          error.response = data;
+          throw error;
+        }
+        if (data.token && data.user) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          setIsAuthenticated(true);
+          setUser(data.user);
+          setError(null);
+        }
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (error.response?.status === 400) throw error;
+        if (attempt < retries) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      }
+    }
+    setError(lastError.response?.error || lastError.message);
+    throw lastError;
   };
 
-  const googleLogin = async () => {
-    setIsAuthenticated(true);
-    setUser({ name: 'Bypass User', email: 'bypass@example.com' });
-    return { user };
+  const login = async (formData, retries = 3) => {
+    let lastError;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`${baseApiUrl}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+          credentials: 'include',
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          const error = new Error(data.error || 'Login failed');
+          error.response = data;
+          throw error;
+        }
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setIsAuthenticated(true);
+        setUser(data.user);
+        setError(null);
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      }
+    }
+    setError(lastError.response?.details || lastError.message);
+    throw lastError;
   };
 
-  const register = async () => ({ user });
+  const googleLogin = async (token) => {
+    if (!token) throw new Error('No token provided');
+    localStorage.setItem('token', token);
+    try {
+      const payload = parseJwt(token);
+      if (!payload) throw new Error('Invalid token format');
+      const userFromToken = {
+        google_id: payload.sub || payload.id,
+        email: payload.email,
+        name: payload.name,
+      };
+      setUser(userFromToken);
+      localStorage.setItem('user', JSON.stringify(userFromToken));
+      setIsAuthenticated(true);
+      setError(null);
+      return { token, user: userFromToken };
+    } catch (err) {
+      setError('Invalid token format');
+      logout();
+      throw err;
+    }
+  };
 
   return (
     <AuthContext.Provider
@@ -251,9 +197,8 @@ export function AuthProvider({ children }) {
   );
 }
 
-// ✅ Custom hook
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
