@@ -10,8 +10,8 @@
       "destination": "https://backend-sp9b.onrender.com/api/spatial/:path*"
     },
     {
-      "source": "/auth/google/callback/:path*",
-      "destination": "https://backend-sp9b.onrender.com/api/v1/auth/google/callback/:path*"
+      "source": "/auth/google/callback",
+      "destination": "https://backend-sp9b.onrender.com/api/v1/auth/google/callback"
     },
     {
       "source": "/(.*)",
@@ -22,52 +22,25 @@
     {
       "source": "/api/auth/:path*",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://aru-smds.vercel.app"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
+        { "key": "Access-Control-Allow-Origin", "value": "https://aru-smds.vercel.app" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     },
     {
       "source": "/api/spatial/:path*",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://aru-smds.vercel.app"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
+        { "key": "Access-Control-Allow-Origin", "value": "https://aru-smds.vercel.app" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     },
     {
-      "source": "/auth/google/callback/:path*",
+      "source": "/auth/google/callback",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://aru-smds.vercel.app"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
+        { "key": "Access-Control-Allow-Origin", "value": "https://aru-smds.vercel.app" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     }
   ]
