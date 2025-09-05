@@ -445,6 +445,34 @@ export function AuthProvider({ children }) {
     setError(null);
   }, []);
 
+  // 🔹 Auto-detect token from URL (Google OAuth callback)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get("token");
+    if (tokenFromUrl) {
+      localStorage.setItem("token", tokenFromUrl);
+      try {
+        const payload = parseJwt(tokenFromUrl);
+        if (payload) {
+          const userFromToken = {
+            google_id: payload.sub || payload.id,
+            email: payload.email,
+            name: payload.name,
+          };
+          setUser(userFromToken);
+          localStorage.setItem("user", JSON.stringify(userFromToken));
+          setIsAuthenticated(true);
+          setError(null);
+        }
+      } catch {
+        logout();
+      }
+      // Clean the URL
+      const newUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, [logout]);
+
   // 🔹 Load auth state from localStorage
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -501,19 +529,42 @@ export function AuthProvider({ children }) {
     return () => clearTimeout(refreshTimeout);
   }, [user, baseApiUrl, logout]);
 
+  // 🔹 API fetch wrapper
+  const apiFetch = async (endpoint, options = {}) => {
+    const token = localStorage.getItem("token");
+    const headers = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    };
+
+    try {
+      const res = await fetch(`${baseApiUrl}${endpoint}`, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) logout();
+        throw new Error(data.error || "API request failed");
+      }
+      return data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
   // 🔹 Register
   const register = async (username, email, password, retries = 3) => {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(`${baseApiUrl}/register`, {
+        const data = await apiFetch("/register", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, email, password }),
-          credentials: "include",
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Registration failed");
         if (data.token && data.user) {
           localStorage.setItem("token", data.token);
           localStorage.setItem("user", JSON.stringify(data.user));
@@ -536,19 +587,17 @@ export function AuthProvider({ children }) {
     let lastError;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(`${baseApiUrl}/login`, {
+        const data = await apiFetch("/login", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
-          credentials: "include",
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Login failed");
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        setIsAuthenticated(true);
-        setUser(data.user);
-        setError(null);
+        if (data.token && data.user) {
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("user", JSON.stringify(data.user));
+          setIsAuthenticated(true);
+          setUser(data.user);
+          setError(null);
+        }
         return data;
       } catch (err) {
         lastError = err;
@@ -590,6 +639,7 @@ export function AuthProvider({ children }) {
         login,
         googleLogin,
         logout,
+        apiFetch, // ← new centralized fetch
         isAuthenticated,
         user,
         isLoading,
