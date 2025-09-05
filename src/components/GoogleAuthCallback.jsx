@@ -68,17 +68,86 @@
 //       <p>{message}</p>
 //     </div>
 //   );
+// // }
+// import { useEffect, useState } from "react";
+// import { useNavigate, useLocation } from "react-router-dom";
+// import { useAuth } from "../context/AuthContext";
+// import { Loader2 } from "lucide-react";
+
+// // ✅ Auth API base
+// const AUTH_API_BASE = (
+//   import.meta.env.VITE_API_AUTH_URL ||
+//   "https://backend-sp9b.onrender.com/api/v1/auth"
+// ).replace(/\/$/, "");
+
+// export default function GoogleAuthCallback() {
+//   const navigate = useNavigate();
+//   const location = useLocation();
+//   const { googleLogin, setError } = useAuth();
+//   const [message, setMessage] = useState("Signing you in...");
+
+//   useEffect(() => {
+//     let isMounted = true;
+//     const params = new URLSearchParams(location.search);
+//     const token = params.get("token");
+//     const error = params.get("error");
+
+//     if (error) {
+//       if (isMounted) setError(error);
+//       setMessage(`Error: ${error}. Redirecting to login...`);
+//       setTimeout(() => isMounted && navigate("/login"), 3000);
+//       return;
+//     }
+
+//     if (!token) {
+//       const msg = "No token received from Google.";
+//       if (isMounted) setError(msg);
+//       setMessage(msg + " Redirecting to login...");
+//       setTimeout(() => isMounted && navigate("/login"), 3000);
+//       return;
+//     }
+
+//     (async () => {
+//       try {
+//         const jwtDecode = (await import("jwt-decode")).default;
+//         const user = jwtDecode(token);
+//         localStorage.setItem("user", JSON.stringify(user));
+//       } catch (err) {
+//         console.warn("Invalid JWT token:", err);
+//       }
+
+//       googleLogin(token)
+//         .then(() => {
+//           if (isMounted) {
+//             localStorage.setItem("token", token);
+//             setMessage("Login successful! Redirecting...");
+//             setTimeout(() => navigate("/dashboard"), 500);
+//           }
+//         })
+//         .catch((err) => {
+//           const msg = err.message || "Google login failed";
+//           if (isMounted) setError(msg);
+//           setMessage(`Error: ${msg}. Redirecting to login...`);
+//           setTimeout(() => isMounted && navigate("/login"), 3000);
+//         });
+//     })();
+
+//     return () => {
+//       isMounted = false;
+//     };
+//   }, [location.search, navigate, googleLogin, setError]);
+
+//   return (
+//     <div className="auth-loading" style={{ textAlign: "center", marginTop: "2rem" }}>
+//       <Loader2 className="animate-spin" size={48} />
+//       <p>{message}</p>
+//     </div>
+//   );
 // }
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Loader2 } from "lucide-react";
-
-// ✅ Auth API base
-const AUTH_API_BASE = (
-  import.meta.env.VITE_API_AUTH_URL ||
-  "https://backend-sp9b.onrender.com/api/v1/auth"
-).replace(/\/$/, "");
 
 export default function GoogleAuthCallback() {
   const navigate = useNavigate();
@@ -109,27 +178,22 @@ export default function GoogleAuthCallback() {
 
     (async () => {
       try {
-        const jwtDecode = (await import("jwt-decode")).default;
-        const user = jwtDecode(token);
-        localStorage.setItem("user", JSON.stringify(user));
-      } catch (err) {
-        console.warn("Invalid JWT token:", err);
-      }
+        await googleLogin(token);
 
-      googleLogin(token)
-        .then(() => {
-          if (isMounted) {
-            localStorage.setItem("token", token);
-            setMessage("Login successful! Redirecting...");
-            setTimeout(() => navigate("/dashboard"), 500);
-          }
-        })
-        .catch((err) => {
-          const msg = err.message || "Google login failed";
-          if (isMounted) setError(msg);
-          setMessage(`Error: ${msg}. Redirecting to login...`);
-          setTimeout(() => isMounted && navigate("/login"), 3000);
-        });
+        // Clean the URL
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        if (isMounted) {
+          setMessage("Login successful! Redirecting...");
+          setTimeout(() => navigate("/dashboard"), 500);
+        }
+      } catch (err) {
+        const msg = err.message || "Google login failed";
+        if (isMounted) setError(msg);
+        setMessage(`Error: ${msg}. Redirecting to login...`);
+        setTimeout(() => isMounted && navigate("/login"), 3000);
+      }
     })();
 
     return () => {
@@ -138,7 +202,7 @@ export default function GoogleAuthCallback() {
   }, [location.search, navigate, googleLogin, setError]);
 
   return (
-    <div className="auth-loading" style={{ textAlign: "center", marginTop: "2rem" }}>
+    <div style={{ textAlign: "center", marginTop: "2rem" }}>
       <Loader2 className="animate-spin" size={48} />
       <p>{message}</p>
     </div>
