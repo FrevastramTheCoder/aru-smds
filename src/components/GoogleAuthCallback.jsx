@@ -223,39 +223,37 @@ export default function GoogleAuthCallback() {
     let isMounted = true;
 
     const handleGoogleLogin = async () => {
-      const params = new URLSearchParams(location.search);
-      const token = params.get("token");
-      const error = params.get("error");
-
-      if (error) {
-        if (isMounted) setError(error);
-        setMessage(`Error: ${error}. Redirecting to login...`);
-        setTimeout(() => isMounted && navigate("/login"), 3000);
-        return;
-      }
-
-      if (!token) {
-        const msg = "No token received from Google.";
-        if (isMounted) setError(msg);
-        setMessage(msg + " Redirecting to login...");
-        setTimeout(() => isMounted && navigate("/login"), 3000);
-        return;
-      }
-
       try {
-        // Call advanced googleLogin from AuthContext
-        const { user } = await googleLogin(token);
+        const params = new URLSearchParams(location.search);
+        const token = params.get("token");
+        const error = params.get("error");
 
-        // Optionally: store user or token anywhere else if needed
-        if (isMounted) {
-          setMessage(`Welcome, ${user.name}! Redirecting...`);
+        // ❌ Handle OAuth errors
+        if (error) {
+          if (isMounted) setError(error);
+          setMessage(`Error: ${error}. Redirecting to login...`);
+          setTimeout(() => isMounted && navigate("/login"), 3000);
+          return;
         }
 
-        // Clean the URL
+        // ❌ No token received
+        if (!token) {
+          const msg = "No token received from Google.";
+          if (isMounted) setError(msg);
+          setMessage(msg + " Redirecting to login...");
+          setTimeout(() => isMounted && navigate("/login"), 3000);
+          return;
+        }
+
+        // ✅ Perform Google login via AuthContext
+        const { user } = await googleLogin(token);
+        if (isMounted) setMessage(`Welcome, ${user.name}! Redirecting...`);
+
+        // 🔹 Clean the URL to remove token and query params
         const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
 
-        // Redirect to dashboard
+        // 🔹 Redirect to dashboard
         setTimeout(() => isMounted && navigate("/dashboard"), 500);
       } catch (err) {
         const msg = err.message || "Google login failed";
