@@ -863,60 +863,8 @@
 //   const context = useContext(AuthContext);
 //   if (!context) throw new Error("useAuth must be used within an AuthProvider");
 //   return context;
-// // }
-// import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-
-// const AuthContext = createContext();
-
-// function parseJwt(token) {
-//   try {
-//     return JSON.parse(atob(token.split(".")[1]));
-//   } catch {
-//     return null;
-//   }
-// }
-
-// export function AuthProvider({ children }) {
-//   const [user, setUser] = useState(null);
-//   const [isAuthenticated, setIsAuthenticated] = useState(false);
-//   const [error, setError] = useState(null);
-
-//   const logout = useCallback(() => {
-//     localStorage.removeItem("token");
-//     localStorage.removeItem("user");
-//     setUser(null);
-//     setIsAuthenticated(false);
-//   }, []);
-
-//   const googleLogin = async (token) => {
-//     if (!token) throw new Error("No token provided");
-//     localStorage.setItem("token", token);
-//     const payload = parseJwt(token);
-//     const userData = { id: payload.id, email: payload.email, name: payload.name };
-//     setUser(userData);
-//     setIsAuthenticated(true);
-//     localStorage.setItem("user", JSON.stringify(userData));
-//     return { token, user: userData };
-//   };
-
-//   return (
-//     <AuthContext.Provider value={{ googleLogin, logout, user, isAuthenticated, error, setError }}>
-//       {children}
-//     </AuthContext.Provider>
-//   );
-// }
-
-// export function useAuth() {
-//   return useContext(AuthContext);
-// }
-
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
+// } old is old
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const AuthContext = createContext();
 
@@ -933,7 +881,6 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState(null);
 
-  // Logout
   const logout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -941,57 +888,19 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
   }, []);
 
-  // Google login handler
   const googleLogin = async (token) => {
-    try {
-      if (!token) throw new Error("No token provided");
-
-      localStorage.setItem("token", token);
-      const payload = parseJwt(token);
-      if (!payload) throw new Error("Invalid token");
-
-      const userData = {
-        id: payload.id,
-        email: payload.email,
-        name: payload.name,
-      };
-
-      setUser(userData);
-      setIsAuthenticated(true);
-      localStorage.setItem("user", JSON.stringify(userData));
-
-      return { token, user: userData };
-    } catch (err) {
-      setError(err.message);
-      logout();
-      return null;
-    }
+    if (!token) throw new Error("No token provided");
+    localStorage.setItem("token", token);
+    const payload = parseJwt(token);
+    const userData = { id: payload.id, email: payload.email, name: payload.name };
+    setUser(userData);
+    setIsAuthenticated(true);
+    localStorage.setItem("user", JSON.stringify(userData));
+    return { token, user: userData };
   };
 
-  // On mount → check for token in URL or localStorage
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-
-    if (token) {
-      googleLogin(token);
-      // Clean URL after reading
-      window.history.replaceState({}, document.title, "/");
-    } else {
-      const storedToken = localStorage.getItem("token");
-      const storedUser = localStorage.getItem("user");
-
-      if (storedToken && storedUser) {
-        setUser(JSON.parse(storedUser));
-        setIsAuthenticated(true);
-      }
-    }
-  }, [googleLogin]);
-
   return (
-    <AuthContext.Provider
-      value={{ googleLogin, logout, user, isAuthenticated, error, setError }}
-    >
+    <AuthContext.Provider value={{ googleLogin, logout, user, isAuthenticated, error, setError }}>
       {children}
     </AuthContext.Provider>
   );
