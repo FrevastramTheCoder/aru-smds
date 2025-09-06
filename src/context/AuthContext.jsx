@@ -658,8 +658,265 @@
 //   const context = useContext(AuthContext);
 //   if (!context) throw new Error("useAuth must be used within an AuthProvider");
 //   return context;
+// // }
+// import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+// const AuthContext = createContext();
+
+// function parseJwt(token) {
+//   try {
+//     return JSON.parse(atob(token.split(".")[1]));
+//   } catch {
+//     return null;
+//   }
 // }
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+// export function AuthProvider({ children }) {
+//   const baseApiUrl = import.meta.env.VITE_API_URL || "/api/v1/auth";
+
+//   const [isAuthenticated, setIsAuthenticated] = useState(false);
+//   const [user, setUser] = useState(null);
+//   const [isLoading, setIsLoading] = useState(true);
+//   const [error, setError] = useState(null);
+
+//   // 🔹 Logout helper
+//   const logout = useCallback(() => {
+//     localStorage.removeItem("token");
+//     localStorage.removeItem("user");
+//     setIsAuthenticated(false);
+//     setUser(null);
+//     setError(null);
+//   }, []);
+
+//   // 🔹 Load auth state from localStorage
+//   useEffect(() => {
+//     const token = localStorage.getItem("token");
+//     const userStr = localStorage.getItem("user");
+//     if (token && userStr) {
+//       const payload = parseJwt(token);
+//       if (payload?.exp * 1000 > Date.now()) {
+//         setIsAuthenticated(true);
+//         setUser(JSON.parse(userStr));
+//       } else logout();
+//     }
+//     setIsLoading(false);
+//   }, [logout]);
+
+//   // 🔹 Auto refresh token before expiry
+//   useEffect(() => {
+//     if (!user) return;
+//     const token = localStorage.getItem("token");
+//     if (!token) return;
+
+//     const payload = parseJwt(token);
+//     if (!payload?.exp) return;
+
+//     const expiresInMs = payload.exp * 1000 - Date.now() - 60000; // refresh 1 min before expiry
+//     if (expiresInMs <= 0) {
+//       logout();
+//       return;
+//     }
+
+//     const refreshTimeout = setTimeout(async () => {
+//       try {
+//         const res = await fetch(`${baseApiUrl}/refresh`, {
+//           method: "POST",
+//           credentials: "include",
+//         });
+//         const data = await res.json();
+//         if (res.ok && data.token && data.user) {
+//           localStorage.setItem("token", data.token);
+//           localStorage.setItem("user", JSON.stringify(data.user));
+//           setUser(data.user);
+//           setIsAuthenticated(true);
+//           setError(null);
+//         } else {
+//           logout();
+//         }
+//       } catch {
+//         logout();
+//       }
+//     }, expiresInMs);
+
+//     return () => clearTimeout(refreshTimeout);
+//   }, [user, baseApiUrl, logout]);
+
+//   // 🔹 Centralized API fetch
+//   const apiFetch = async (endpoint, options = {}) => {
+//     const token = localStorage.getItem("token");
+//     const headers = {
+//       "Content-Type": "application/json",
+//       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+//       ...options.headers,
+//     };
+//     try {
+//       const res = await fetch(`${baseApiUrl}${endpoint}`, { ...options, headers, credentials: "include" });
+//       const data = await res.json();
+//       if (!res.ok) {
+//         if (res.status === 401) logout();
+//         throw new Error(data.error || "API request failed");
+//       }
+//       return data;
+//     } catch (err) {
+//       setError(err.message);
+//       throw err;
+//     }
+//   };
+
+//   // 🔹 Register
+//   const register = async (username, email, password) => {
+//     const data = await apiFetch("/register", {
+//       method: "POST",
+//       body: JSON.stringify({ username, email, password }),
+//     });
+//     return data;
+//   };
+
+//   // 🔹 Login (email/password)
+//   const login = async (formData) => {
+//     const data = await apiFetch("/login", {
+//       method: "POST",
+//       body: JSON.stringify(formData),
+//     });
+//     if (data.token && data.user) {
+//       localStorage.setItem("token", data.token);
+//       localStorage.setItem("user", JSON.stringify(data.user));
+//       setUser(data.user);
+//       setIsAuthenticated(true);
+//       setError(null);
+//     }
+//     return data;
+//   };
+
+//   // 🔹 Google Login
+//   const googleLogin = async (token) => {
+//     if (!token) throw new Error("No token provided");
+//     localStorage.setItem("token", token);
+
+//     try {
+//       const payload = parseJwt(token);
+//       if (!payload) throw new Error("Invalid token format");
+
+//       const u = {
+//         google_id: payload.sub || payload.id,
+//         email: payload.email,
+//         name: payload.name,
+//       };
+//       setUser(u);
+//       localStorage.setItem("user", JSON.stringify(u));
+//       setIsAuthenticated(true);
+//       setError(null);
+
+//       // 🔹 Setup auto-refresh for Google token
+//       const expiresInMs = payload.exp * 1000 - Date.now() - 60000; // 1 min before expiry
+//       if (expiresInMs > 0) {
+//         setTimeout(async () => {
+//           try {
+//             const res = await fetch(`${baseApiUrl}/google/refresh`, {
+//               method: "POST",
+//               credentials: "include",
+//             });
+//             const data = await res.json();
+//             if (res.ok && data.token && data.user) {
+//               localStorage.setItem("token", data.token);
+//               localStorage.setItem("user", JSON.stringify(data.user));
+//               setUser(data.user);
+//               setIsAuthenticated(true);
+//             } else logout();
+//           } catch {
+//             logout();
+//           }
+//         }, expiresInMs);
+//       }
+
+//       return { token, user: u };
+//     } catch (err) {
+//       setError("Invalid token format");
+//       logout();
+//       throw err;
+//     }
+//   };
+
+//   return (
+//     <AuthContext.Provider
+//       value={{
+//         register,
+//         login,
+//         googleLogin,
+//         logout,
+//         apiFetch,
+//         isAuthenticated,
+//         user,
+//         isLoading,
+//         error,
+//         setError,
+//         setIsAuthenticated,
+//         setUser,
+//       }}
+//     >
+//       {children}
+//     </AuthContext.Provider>
+//   );
+// }
+
+// export function useAuth() {
+//   const context = useContext(AuthContext);
+//   if (!context) throw new Error("useAuth must be used within an AuthProvider");
+//   return context;
+// // }
+// import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+// const AuthContext = createContext();
+
+// function parseJwt(token) {
+//   try {
+//     return JSON.parse(atob(token.split(".")[1]));
+//   } catch {
+//     return null;
+//   }
+// }
+
+// export function AuthProvider({ children }) {
+//   const [user, setUser] = useState(null);
+//   const [isAuthenticated, setIsAuthenticated] = useState(false);
+//   const [error, setError] = useState(null);
+
+//   const logout = useCallback(() => {
+//     localStorage.removeItem("token");
+//     localStorage.removeItem("user");
+//     setUser(null);
+//     setIsAuthenticated(false);
+//   }, []);
+
+//   const googleLogin = async (token) => {
+//     if (!token) throw new Error("No token provided");
+//     localStorage.setItem("token", token);
+//     const payload = parseJwt(token);
+//     const userData = { id: payload.id, email: payload.email, name: payload.name };
+//     setUser(userData);
+//     setIsAuthenticated(true);
+//     localStorage.setItem("user", JSON.stringify(userData));
+//     return { token, user: userData };
+//   };
+
+//   return (
+//     <AuthContext.Provider value={{ googleLogin, logout, user, isAuthenticated, error, setError }}>
+//       {children}
+//     </AuthContext.Provider>
+//   );
+// }
+
+// export function useAuth() {
+//   return useContext(AuthContext);
+// }
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 
 const AuthContext = createContext();
 
@@ -672,187 +929,68 @@ function parseJwt(token) {
 }
 
 export function AuthProvider({ children }) {
-  const baseApiUrl = import.meta.env.VITE_API_URL || "/api/v1/auth";
-
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState(null);
 
-  // 🔹 Logout helper
+  // Logout
   const logout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    setIsAuthenticated(false);
     setUser(null);
-    setError(null);
+    setIsAuthenticated(false);
   }, []);
 
-  // 🔹 Load auth state from localStorage
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const userStr = localStorage.getItem("user");
-    if (token && userStr) {
-      const payload = parseJwt(token);
-      if (payload?.exp * 1000 > Date.now()) {
-        setIsAuthenticated(true);
-        setUser(JSON.parse(userStr));
-      } else logout();
-    }
-    setIsLoading(false);
-  }, [logout]);
-
-  // 🔹 Auto refresh token before expiry
-  useEffect(() => {
-    if (!user) return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    const payload = parseJwt(token);
-    if (!payload?.exp) return;
-
-    const expiresInMs = payload.exp * 1000 - Date.now() - 60000; // refresh 1 min before expiry
-    if (expiresInMs <= 0) {
-      logout();
-      return;
-    }
-
-    const refreshTimeout = setTimeout(async () => {
-      try {
-        const res = await fetch(`${baseApiUrl}/refresh`, {
-          method: "POST",
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (res.ok && data.token && data.user) {
-          localStorage.setItem("token", data.token);
-          localStorage.setItem("user", JSON.stringify(data.user));
-          setUser(data.user);
-          setIsAuthenticated(true);
-          setError(null);
-        } else {
-          logout();
-        }
-      } catch {
-        logout();
-      }
-    }, expiresInMs);
-
-    return () => clearTimeout(refreshTimeout);
-  }, [user, baseApiUrl, logout]);
-
-  // 🔹 Centralized API fetch
-  const apiFetch = async (endpoint, options = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    };
-    try {
-      const res = await fetch(`${baseApiUrl}${endpoint}`, { ...options, headers, credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) {
-        if (res.status === 401) logout();
-        throw new Error(data.error || "API request failed");
-      }
-      return data;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    }
-  };
-
-  // 🔹 Register
-  const register = async (username, email, password) => {
-    const data = await apiFetch("/register", {
-      method: "POST",
-      body: JSON.stringify({ username, email, password }),
-    });
-    return data;
-  };
-
-  // 🔹 Login (email/password)
-  const login = async (formData) => {
-    const data = await apiFetch("/login", {
-      method: "POST",
-      body: JSON.stringify(formData),
-    });
-    if (data.token && data.user) {
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setUser(data.user);
-      setIsAuthenticated(true);
-      setError(null);
-    }
-    return data;
-  };
-
-  // 🔹 Google Login
+  // Google login handler
   const googleLogin = async (token) => {
-    if (!token) throw new Error("No token provided");
-    localStorage.setItem("token", token);
-
     try {
-      const payload = parseJwt(token);
-      if (!payload) throw new Error("Invalid token format");
+      if (!token) throw new Error("No token provided");
 
-      const u = {
-        google_id: payload.sub || payload.id,
+      localStorage.setItem("token", token);
+      const payload = parseJwt(token);
+      if (!payload) throw new Error("Invalid token");
+
+      const userData = {
+        id: payload.id,
         email: payload.email,
         name: payload.name,
       };
-      setUser(u);
-      localStorage.setItem("user", JSON.stringify(u));
+
+      setUser(userData);
       setIsAuthenticated(true);
-      setError(null);
+      localStorage.setItem("user", JSON.stringify(userData));
 
-      // 🔹 Setup auto-refresh for Google token
-      const expiresInMs = payload.exp * 1000 - Date.now() - 60000; // 1 min before expiry
-      if (expiresInMs > 0) {
-        setTimeout(async () => {
-          try {
-            const res = await fetch(`${baseApiUrl}/google/refresh`, {
-              method: "POST",
-              credentials: "include",
-            });
-            const data = await res.json();
-            if (res.ok && data.token && data.user) {
-              localStorage.setItem("token", data.token);
-              localStorage.setItem("user", JSON.stringify(data.user));
-              setUser(data.user);
-              setIsAuthenticated(true);
-            } else logout();
-          } catch {
-            logout();
-          }
-        }, expiresInMs);
-      }
-
-      return { token, user: u };
+      return { token, user: userData };
     } catch (err) {
-      setError("Invalid token format");
+      setError(err.message);
       logout();
-      throw err;
+      return null;
     }
   };
 
+  // On mount → check for token in URL or localStorage
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token) {
+      googleLogin(token);
+      // Clean URL after reading
+      window.history.replaceState({}, document.title, "/");
+    } else {
+      const storedToken = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+
+      if (storedToken && storedUser) {
+        setUser(JSON.parse(storedUser));
+        setIsAuthenticated(true);
+      }
+    }
+  }, [googleLogin]);
+
   return (
     <AuthContext.Provider
-      value={{
-        register,
-        login,
-        googleLogin,
-        logout,
-        apiFetch,
-        isAuthenticated,
-        user,
-        isLoading,
-        error,
-        setError,
-        setIsAuthenticated,
-        setUser,
-      }}
+      value={{ googleLogin, logout, user, isAuthenticated, error, setError }}
     >
       {children}
     </AuthContext.Provider>
@@ -860,7 +998,5 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
-  return context;
+  return useContext(AuthContext);
 }
