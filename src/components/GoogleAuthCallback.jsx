@@ -413,7 +413,6 @@
 //     </div>
 //   );
 // }
-// src/components/GoogleAuthCallback.jsx
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -451,7 +450,7 @@ export default function GoogleAuthCallback() {
         await googleLogin(token);
 
         // Step 2: Validate token with backend
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/me`, {
+        const res = await fetch("/api/v1/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -464,7 +463,7 @@ export default function GoogleAuthCallback() {
 
         const userData = await res.json();
         if (isMounted) {
-          setUser(userData); // store user info in context
+          setUser(userData); // Store user info in context
           setMessage(`Welcome, ${userData.name}! Redirecting...`);
         }
 
