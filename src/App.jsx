@@ -162,5 +162,3 @@ function App() {
     </GoogleOAuthProvider>
   );
 }
-
-export default App;
