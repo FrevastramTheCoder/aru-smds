@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/google-callback",
+      "destination": "/index.html"
+    },
+    {
       "source": "/api/v1/auth/(.*)",
       "destination": "https://backend-sp9b.onrender.com/api/v1/auth/$1"
     },
@@ -11,10 +15,6 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/google-callback(.*)",
       "destination": "/index.html"
     }
   ],
