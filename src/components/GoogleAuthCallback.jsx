@@ -413,7 +413,6 @@
 //     </div>
 //   );
 // }
-// src/components/GoogleAuthCallback.jsx
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -447,14 +446,12 @@ export default function GoogleAuthCallback() {
           return setTimeout(() => isMounted && navigate("/login"), 3000);
         }
 
-        // Step 1: Call context login to store token locally
+        // Step 1: Store token locally via AuthContext
         await googleLogin(token);
 
-        // Step 2: Validate token with backend immediately
-        const res = await fetch(`${process.env.VITE_API_URL}/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        // Step 2: Validate token with backend
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/me`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!res.ok) {
@@ -466,11 +463,11 @@ export default function GoogleAuthCallback() {
 
         const userData = await res.json();
         if (isMounted) {
-          setUser(userData); // store user info in context
+          setUser(userData);
           setMessage(`Welcome, ${userData.name}! Redirecting...`);
         }
 
-        // Step 3: Clean URL (remove token from browser)
+        // Step 3: Clean URL
         const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
 
@@ -485,22 +482,18 @@ export default function GoogleAuthCallback() {
     };
 
     handleGoogleLogin();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [location.search, navigate, googleLogin, setError, setUser]);
 
   return (
-    <div
-      style={{
-        textAlign: "center",
-        marginTop: "2rem",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "1rem",
-      }}
-    >
+    <div style={{
+      textAlign: "center",
+      marginTop: "2rem",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "1rem"
+    }}>
       <Loader2 className="animate-spin" size={48} />
       <p>{message}</p>
     </div>
