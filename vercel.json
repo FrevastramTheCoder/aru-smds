@@ -10,7 +10,7 @@
       "destination": "https://backend-sp9b.onrender.com/api/spatial/$1"
     },
     {
-      "source": "/auth/google/callback(.*)",
+      "source": "/google-callback",
       "destination": "/index.html"
     },
     {
