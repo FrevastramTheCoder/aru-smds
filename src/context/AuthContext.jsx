@@ -908,7 +908,73 @@
 
 // export function useAuth() {
 //   return useContext(AuthContext);
+// // }
+// import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+// const AuthContext = createContext();
+
+// function parseJwt(token) {
+//   try {
+//     return JSON.parse(atob(token.split(".")[1]));
+//   } catch {
+//     return null;
+//   }
 // }
+
+// export function AuthProvider({ children }) {
+//   const [user, setUser] = useState(null);
+//   const [isAuthenticated, setIsAuthenticated] = useState(false);
+//   const [error, setError] = useState(null);
+
+//   const logout = useCallback(() => {
+//     localStorage.removeItem("token");
+//     localStorage.removeItem("user");
+//     setUser(null);
+//     setIsAuthenticated(false);
+//   }, []);
+
+//   const googleLogin = async (token) => {
+//     if (!token) throw new Error("No token provided");
+//     localStorage.setItem("token", token);
+//     const payload = parseJwt(token);
+//     if (!payload) throw new Error("Invalid token");
+//     const userData = { id: payload.id, email: payload.email, name: payload.name };
+//     setUser(userData);
+//     setIsAuthenticated(true);
+//     localStorage.setItem("user", JSON.stringify(userData));
+//     return { token, user: userData };
+//   };
+
+//   // Check for existing token on mount
+//   useEffect(() => {
+//     const token = localStorage.getItem("token");
+//     const storedUser = localStorage.getItem("user");
+//     if (token && storedUser) {
+//       try {
+//         const payload = parseJwt(token);
+//         if (payload && payload.exp * 1000 > Date.now()) {
+//           setUser(JSON.parse(storedUser));
+//           setIsAuthenticated(true);
+//         } else {
+//           logout(); // Clear expired token
+//         }
+//       } catch {
+//         logout(); // Clear invalid token
+//       }
+//     }
+//   }, [logout]);
+
+//   return (
+//     <AuthContext.Provider value={{ googleLogin, logout, user, isAuthenticated, error, setError, setUser }}>
+//       {children}
+//     </AuthContext.Provider>
+//   );
+// }
+
+// export function useAuth() {
+//   return useContext(AuthContext);
+// }
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const AuthContext = createContext();
@@ -936,16 +1002,19 @@ export function AuthProvider({ children }) {
   const googleLogin = async (token) => {
     if (!token) throw new Error("No token provided");
     localStorage.setItem("token", token);
+
     const payload = parseJwt(token);
     if (!payload) throw new Error("Invalid token");
+
     const userData = { id: payload.id, email: payload.email, name: payload.name };
     setUser(userData);
     setIsAuthenticated(true);
     localStorage.setItem("user", JSON.stringify(userData));
+
     return { token, user: userData };
   };
 
-  // Check for existing token on mount
+  // Restore auth state on mount
   useEffect(() => {
     const token = localStorage.getItem("token");
     const storedUser = localStorage.getItem("user");
@@ -965,7 +1034,9 @@ export function AuthProvider({ children }) {
   }, [logout]);
 
   return (
-    <AuthContext.Provider value={{ googleLogin, logout, user, isAuthenticated, error, setError, setUser }}>
+    <AuthContext.Provider
+      value={{ googleLogin, logout, user, isAuthenticated, error, setError, setUser }}
+    >
       {children}
     </AuthContext.Provider>
   );
