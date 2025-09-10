@@ -162,6 +162,7 @@
 //     </GoogleOAuthProvider>
 //   );
 // }
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -208,6 +209,9 @@ function App() {
               <Route path="/data" element={<DataManagement />} />
               <Route path="/data-view" element={<DataView />} />
             </Route>
+
+            {/* Catch-all route to handle frontend routes on refresh */}
+            <Route path="*" element={<SystemDashboard />} />
           </Routes>
         </Router>
       </AuthProvider>

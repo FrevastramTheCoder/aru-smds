@@ -413,6 +413,7 @@
 //     </div>
 //   );
 // }
+// src/components/GoogleAuthCallback.jsx
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -463,11 +464,11 @@ export default function GoogleAuthCallback() {
 
         const userData = await res.json();
         if (isMounted) {
-          setUser(userData);
+          setUser(userData); // store user info in context
           setMessage(`Welcome, ${userData.name}! Redirecting...`);
         }
 
-        // Step 3: Clean URL
+        // Step 3: Clean URL (remove token from browser)
         const cleanUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
 
@@ -482,18 +483,23 @@ export default function GoogleAuthCallback() {
     };
 
     handleGoogleLogin();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [location.search, navigate, googleLogin, setError, setUser]);
 
   return (
-    <div style={{
-      textAlign: "center",
-      marginTop: "2rem",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: "1rem"
-    }}>
+    <div
+      style={{
+        textAlign: "center",
+        marginTop: "2rem",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "1rem",
+      }}
+    >
       <Loader2 className="animate-spin" size={48} />
       <p>{message}</p>
     </div>
